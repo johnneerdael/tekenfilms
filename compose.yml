@@ -11,3 +11,10 @@ services:
     volumes:
       - ./NL:/app/NL:ro
       - ./data:/app/data:ro
+    networks:
+      - default
+      - caddy_net
+
+networks:
+  caddy_net:
+    external: true
