@@ -1,0 +1,13 @@
+services:
+  tekenfilms:
+    image: ghcr.io/johnneerdael/tekenfilms:latest
+    container_name: tekenfilms
+    restart: unless-stopped
+    ports:
+      - "7010:7010"
+    environment:
+      PORT: "7010"
+      BASE_URL: "https://tekenfilms.nexioapp.org"
+    volumes:
+      - ./NL:/app/NL:ro
+      - ./data:/app/data:ro

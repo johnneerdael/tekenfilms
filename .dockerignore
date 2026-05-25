@@ -1,0 +1,12 @@
+node_modules/
+.git/
+.github/
+.env
+NL/
+data/generation-report.json
+data/meta/*.json
+docs/
+tests/
+tests_py/
+scripts/
+npm-debug.log*
