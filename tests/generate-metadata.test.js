@@ -156,6 +156,7 @@ test("builds lightweight catalog metadata", () => {
     type: "movie",
     name: "Frozen",
     poster: "https://image.tmdb.org/t/p/w500/poster.jpg",
+    logo: "https://image.tmdb.org/t/p/w500/logo.png",
     background: "https://image.tmdb.org/t/p/original/backdrop.jpg",
     description: "Beschrijving",
     releaseInfo: "2013"
@@ -165,11 +166,13 @@ test("builds lightweight catalog metadata", () => {
     "background",
     "description",
     "id",
+    "logo",
     "name",
     "poster",
     "releaseInfo",
     "type"
   ]);
+  assert.equal(catalogMeta.logo, "https://image.tmdb.org/t/p/w500/logo.png");
 });
 
 test("loads API blueprint defaults", () => {

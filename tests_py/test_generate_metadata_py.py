@@ -179,6 +179,7 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertEqual(meta["imdbId"], "tt2294629")
         self.assertEqual(meta["genres"], ["Animatie", "Familie"])
         self.assertEqual(build_catalog_meta(meta)["id"], "tekenfilms:frozen-2013")
+        self.assertEqual(build_catalog_meta(meta)["logo"], "https://image.tmdb.org/t/p/w500/logo.png")
 
     def test_write_outputs_supports_preview_and_write(self):
         with tempfile.TemporaryDirectory() as temp_dir:

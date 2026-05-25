@@ -241,7 +241,7 @@ def build_stremio_meta(parsed, details):
 
 
 def build_catalog_meta(meta):
-    allowed = ["id", "type", "name", "poster", "background", "description", "releaseInfo"]
+    allowed = ["id", "type", "name", "poster", "logo", "background", "description", "releaseInfo"]
     return {key: meta[key] for key in allowed if key in meta}
 
 

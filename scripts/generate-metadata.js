@@ -221,7 +221,7 @@ function buildStremioMeta({ parsed, details }) {
 }
 
 function buildCatalogMeta(meta) {
-  const allowed = ["id", "type", "name", "poster", "background", "description", "releaseInfo"];
+  const allowed = ["id", "type", "name", "poster", "logo", "background", "description", "releaseInfo"];
   return Object.fromEntries(allowed.filter(key => meta[key] !== undefined).map(key => [key, meta[key]]));
 }
 
