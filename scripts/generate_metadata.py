@@ -9,7 +9,7 @@ import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 ADDON_NAME = "Tekenfilms"
@@ -116,6 +116,10 @@ def build_movie_id(title, year):
 
 
 def id_to_slug(identifier):
+    if re.match(r"^tt\d+$", identifier or ""):
+        return identifier
+    if re.match(r"^tmdb:\d+$", identifier or ""):
+        return identifier.replace(":", "-")
     return identifier[len(ID_PREFIX):] if identifier.startswith(ID_PREFIX) else None
 
 
@@ -202,6 +206,57 @@ def image_url(size, file_path):
     return f"{TMDB_IMAGE_BASE}/{size}{file_path}" if file_path else None
 
 
+def normalize_api_url(value, fallback):
+    return (value or fallback).rstrip("/")
+
+
+def format_runtime(minutes):
+    if not minutes:
+        return None
+    hours = int(minutes) // 60
+    remaining = int(minutes) % 60
+    return f"{hours}h{remaining:02d}min" if hours else f"{remaining}min"
+
+
+def build_stremio_id(details, parsed):
+    if details.get("imdb_id"):
+        return details["imdb_id"]
+    if details.get("id"):
+        return f"tmdb:{details['id']}"
+    return build_movie_id(details.get("title") or parsed["title"], parsed.get("year"))
+
+
+def build_poster_url(api_url, api_key, imdb_id, lang="nl-NL"):
+    base = normalize_api_url(api_url, "https://api.top-posters.com")
+    url = f"{base}/{quote(api_key)}/imdb/poster/{quote(imdb_id)}.jpg"
+    return f"{url}?{urlencode({'lang': lang})}" if lang else url
+
+
+def local_poster_url(base_url, identifier):
+    return f"{base_url.rstrip().rstrip('/')}/posters/{id_to_slug(identifier)}.jpg"
+
+
+def stremio_search_url(value):
+    return f"stremio:///search?{urlencode({'search': value})}"
+
+
+def build_links(meta):
+    links = []
+    if meta.get("imdbId"):
+        if meta.get("imdbRating"):
+            links.append({"name": meta["imdbRating"], "category": "imdb", "url": f"https://imdb.com/title/{meta['imdbId']}"})
+        else:
+            links.append({"name": "IMDb", "category": "imdb", "url": f"https://imdb.com/title/{meta['imdbId']}"})
+    links.append({"name": meta["name"], "category": "share", "url": f"https://www.strem.io/s/movie/{slugify(meta['name'])}"})
+    for genre in meta.get("genres", []):
+        links.append({"name": genre, "category": "Genres", "url": stremio_search_url(genre)})
+    for person in meta.get("cast", [])[:8]:
+        links.append({"name": person, "category": "Cast", "url": stremio_search_url(person)})
+    for person in meta.get("director", [])[:3]:
+        links.append({"name": person, "category": "Director", "url": stremio_search_url(person)})
+    return links
+
+
 def pick_logo(images):
     logos = (images or {}).get("logos") or []
     logo = (
@@ -212,9 +267,9 @@ def pick_logo(images):
     return image_url("w500", logo.get("file_path")) if logo else None
 
 
-def build_stremio_meta(parsed, details):
+def build_stremio_meta(parsed, details, base_url="http://127.0.0.1:7010"):
     year = get_year(details.get("release_date")) or parsed.get("year")
-    identifier = build_movie_id(details.get("title") or parsed["title"], year)
+    identifier = build_stremio_id(details, {**parsed, "year": year})
     crew = details.get("credits", {}).get("crew", [])
     cast = details.get("credits", {}).get("cast", [])
     meta = {
@@ -225,8 +280,8 @@ def build_stremio_meta(parsed, details):
         "videoFilename": parsed["filename"],
         "releaseInfo": str(year) if year else None,
         "released": f"{details['release_date']}T00:00:00.000Z" if details.get("release_date") else None,
-        "runtime": f"{details['runtime']} min" if details.get("runtime") else None,
-        "poster": image_url("w500", details.get("poster_path")),
+        "runtime": format_runtime(details.get("runtime")),
+        "poster": local_poster_url(base_url, identifier),
         "logo": pick_logo(details.get("images")),
         "background": image_url("original", details.get("backdrop_path")),
         "description": details.get("overview") or None,
@@ -235,14 +290,68 @@ def build_stremio_meta(parsed, details):
         "director": [person["name"] for person in crew if person.get("job") == "Director" and person.get("name")],
         "tmdbId": details.get("id"),
         "imdbId": details.get("imdb_id") or None,
-        "behaviorHints": {"defaultVideoId": identifier},
+        "behaviorHints": {"defaultVideoId": identifier, "hasScheduledVideos": False},
     }
     return {key: value for key, value in meta.items() if value is not None}
 
 
+def merge_rating(meta, rating):
+    if not rating:
+        return meta
+    average = rating.get("averageRating")
+    if average is not None:
+        meta["imdbRating"] = f"{float(average):.1f}"
+    if rating.get("numVotes") is not None:
+        meta["imdbRatingCount"] = rating["numVotes"]
+    return meta
+
+
 def build_catalog_meta(meta):
-    allowed = ["id", "type", "name", "poster", "logo", "background", "description", "releaseInfo"]
+    allowed = ["id", "type", "name", "poster", "logo", "background", "description", "releaseInfo", "runtime", "imdbRating", "links"]
     return {key: meta[key] for key in allowed if key in meta}
+
+
+class RatingsClient:
+    def __init__(self, api_url, api_key):
+        self.api_url = normalize_api_url(api_url, "https://api.nexioapp.org")
+        self.api_key = api_key
+
+    def bulk(self, identifiers):
+        ids = [identifier for identifier in identifiers if identifier]
+        if not ids or not self.api_key:
+            return {}
+        request = Request(
+            f"{self.api_url}/v1/ratings/bulk",
+            data=json.dumps({"identifiers": ids}).encode("utf-8"),
+            headers={"Accept": "application/json", "Content-Type": "application/json", "X-API-Key": self.api_key},
+            method="POST",
+        )
+        with urlopen(request, timeout=25) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        return {item["tconst"]: item for item in body.get("results", [])}
+
+
+class PosterClient:
+    def __init__(self, api_url, api_key):
+        self.api_url = normalize_api_url(api_url, "https://api.top-posters.com")
+        self.api_key = api_key
+
+    def download(self, imdb_id, destination):
+        if not self.api_key or not imdb_id:
+            return False
+        for lang in ["nl-NL", None]:
+            url = build_poster_url(self.api_url, self.api_key, imdb_id, lang)
+            try:
+                request = Request(url, headers={"Accept": "image/jpeg"})
+                with urlopen(request, timeout=30) as response:
+                    if response.status != 200:
+                        continue
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(response.read())
+                    return True
+            except Exception:
+                continue
+        return False
 
 
 class TmdbClient:
@@ -297,6 +406,31 @@ def scan_video_files(nl_dir):
     return sorted(path.name for path in nl_dir.iterdir() if path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS)
 
 
+def download_posters(root_dir, metas, poster_client):
+    if not poster_client:
+        return []
+    data_dir = root_dir / "data"
+    temp_dir = data_dir / "posters.tmp"
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    failures = []
+    for meta in metas:
+        if not meta.get("imdbId"):
+            continue
+        destination = temp_dir / f"{id_to_slug(meta['id'])}.jpg"
+        if not poster_client.download(meta["imdbId"], destination):
+            failures.append({"filename": meta["videoFilename"], "reason": "no top-posters poster available", "id": meta["id"]})
+    if failures:
+        shutil.rmtree(temp_dir)
+        return failures
+    poster_dir = data_dir / "posters"
+    if poster_dir.exists():
+        shutil.rmtree(poster_dir)
+    temp_dir.rename(poster_dir)
+    return []
+
+
 def write_outputs(root_dir, metas, report, write):
     data_dir = root_dir / "data"
     meta_dir = data_dir / "meta"
@@ -329,7 +463,10 @@ def generate(root_dir, write=False):
     env = {**load_env(root_dir / ".env"), **os.environ}
     blueprints = load_api_blueprints(root_dir)
     api_url = env.get("TMDB_API_URL") or f"{blueprints['tmdbServerUrl']}/3/"
+    base_url = env.get("BASE_URL") or "http://127.0.0.1:7010"
     client = TmdbClient(api_url, env.get("TMDB_API_KEY"))
+    ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
+    poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
     filenames = scan_video_files(root_dir / "NL")
     metas = []
@@ -344,10 +481,22 @@ def generate(root_dir, write=False):
             if not details:
                 failures.append({"filename": filename, "reason": "no confident TMDB match", "parsed": parsed})
                 continue
-            meta = build_stremio_meta(parsed, details)
+            meta = build_stremio_meta(parsed, details, base_url)
             add_meta_or_duplicate(meta, seen_ids, metas, duplicates)
         except Exception as error:
             failures.append({"filename": filename, "reason": str(error), "parsed": parsed})
+
+    if metas:
+        try:
+            ratings = ratings_client.bulk([meta.get("imdbId") for meta in metas])
+            for meta in metas:
+                merge_rating(meta, ratings.get(meta.get("imdbId")))
+                meta["links"] = build_links(meta)
+        except Exception as error:
+            failures.append({"filename": "IMDb ratings", "reason": str(error)})
+
+    if write and not failures:
+        failures.extend(download_posters(root_dir, metas, poster_client))
 
     report = {
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

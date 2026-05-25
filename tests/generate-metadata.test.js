@@ -5,9 +5,12 @@ const {
   addMetaOrDuplicate,
   applyManualMatch,
   buildQueryCandidates,
+  buildPosterUrl,
   chooseTmdbResult,
   buildStremioMeta,
   buildCatalogMeta,
+  formatRuntime,
+  mergeRating,
   loadApiBlueprints
 } = require("../scripts/generate-metadata");
 
@@ -136,40 +139,69 @@ test("builds full Stremio metadata", () => {
       images: {
         logos: [{ file_path: "/logo.png", iso_639_1: "nl" }]
       }
-    }
+    },
+    baseUrl: "https://tekenfilms.nexioapp.org"
   });
 
-  assert.equal(meta.id, "tekenfilms:frozen-2013");
+  assert.equal(meta.id, "tt2294629");
   assert.equal(meta.name, "Frozen");
   assert.equal(meta.videoFilename, "Frozen.2013.BluRay.NL.avi");
-  assert.equal(meta.poster, "https://image.tmdb.org/t/p/w500/poster.jpg");
+  assert.equal(meta.poster, "https://tekenfilms.nexioapp.org/posters/tt2294629.jpg");
   assert.equal(meta.logo, "https://image.tmdb.org/t/p/w500/logo.png");
   assert.equal(meta.background, "https://image.tmdb.org/t/p/original/backdrop.jpg");
   assert.equal(meta.imdbId, "tt2294629");
   assert.deepEqual(meta.genres, ["Animatie", "Familie"]);
-  assert.deepEqual(meta.behaviorHints, { defaultVideoId: "tekenfilms:frozen-2013" });
+  assert.deepEqual(meta.behaviorHints, { defaultVideoId: "tt2294629", hasScheduledVideos: false });
+});
+
+test("merges IMDb rating into Stremio metadata", () => {
+  const meta = mergeRating({ id: "tt2294629" }, { averageRating: 7.4, numVotes: 123456 });
+  assert.equal(meta.imdbRating, "7.4");
+  assert.equal(meta.imdbRatingCount, 123456);
+});
+
+test("formats runtime like common Stremio metadata", () => {
+  assert.equal(formatRuntime(102), "1h42min");
+  assert.equal(formatRuntime(null), undefined);
+});
+
+test("builds Dutch top-posters URL", () => {
+  assert.equal(
+    buildPosterUrl("https://api.top-posters.com", "TP-test", "tt2294629"),
+    "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg?lang=nl-NL"
+  );
+  assert.equal(
+    buildPosterUrl("https://api.top-posters.com", "TP-test", "tt2294629", null),
+    "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg"
+  );
 });
 
 test("builds lightweight catalog metadata", () => {
   const catalogMeta = buildCatalogMeta({
-    id: "tekenfilms:frozen-2013",
+    id: "tt2294629",
     type: "movie",
     name: "Frozen",
-    poster: "https://image.tmdb.org/t/p/w500/poster.jpg",
+    poster: "https://tekenfilms.nexioapp.org/posters/tt2294629.jpg",
     logo: "https://image.tmdb.org/t/p/w500/logo.png",
     background: "https://image.tmdb.org/t/p/original/backdrop.jpg",
     description: "Beschrijving",
-    releaseInfo: "2013"
+    releaseInfo: "2013",
+    runtime: "1h42min",
+    imdbRating: "7.4",
+    links: [{ name: "7.4", category: "imdb", url: "https://imdb.com/title/tt2294629" }]
   });
 
   assert.deepEqual(Object.keys(catalogMeta).sort(), [
     "background",
     "description",
     "id",
+    "imdbRating",
+    "links",
     "logo",
     "name",
     "poster",
     "releaseInfo",
+    "runtime",
     "type"
   ]);
   assert.equal(catalogMeta.logo, "https://image.tmdb.org/t/p/w500/logo.png");

@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const { createApp } = require("../server");
 
@@ -36,5 +38,21 @@ test("sets CORS headers", async () => {
     assert.equal(response.headers.get("access-control-allow-origin"), "*");
   } finally {
     server.close();
+  }
+});
+
+test("serves self-hosted posters", async () => {
+  const postersDir = path.join(__dirname, "..", "data", "posters");
+  fs.mkdirSync(postersDir, { recursive: true });
+  fs.writeFileSync(path.join(postersDir, "test-poster.jpg"), "poster");
+
+  const { server, url } = await listen(createApp());
+  try {
+    const response = await fetch(`${url}/posters/test-poster.jpg`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "poster");
+  } finally {
+    server.close();
+    fs.rmSync(path.join(postersDir, "test-poster.jpg"), { force: true });
   }
 });

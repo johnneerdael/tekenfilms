@@ -6,12 +6,15 @@ from pathlib import Path
 from scripts.generate_metadata import (
     add_meta_or_duplicate,
     apply_manual_match,
+    build_poster_url,
     build_query_candidates,
     build_catalog_meta,
     build_movie_id,
     build_stremio_meta,
     choose_tmdb_result,
+    format_runtime,
     load_api_blueprints,
+    merge_rating,
     parse_video_filename,
     write_outputs,
 )
@@ -170,16 +173,33 @@ class GenerateMetadataPythonTests(unittest.TestCase):
                 },
                 "images": {"logos": [{"file_path": "/logo.png", "iso_639_1": "nl"}]},
             },
+            "https://tekenfilms.nexioapp.org",
         )
-        self.assertEqual(meta["id"], "tekenfilms:frozen-2013")
+        self.assertEqual(meta["id"], "tt2294629")
         self.assertEqual(meta["videoFilename"], "Frozen.2013.BluRay.NL.avi")
-        self.assertEqual(meta["poster"], "https://image.tmdb.org/t/p/w500/poster.jpg")
+        self.assertEqual(meta["poster"], "https://tekenfilms.nexioapp.org/posters/tt2294629.jpg")
         self.assertEqual(meta["logo"], "https://image.tmdb.org/t/p/w500/logo.png")
         self.assertEqual(meta["background"], "https://image.tmdb.org/t/p/original/backdrop.jpg")
         self.assertEqual(meta["imdbId"], "tt2294629")
         self.assertEqual(meta["genres"], ["Animatie", "Familie"])
-        self.assertEqual(build_catalog_meta(meta)["id"], "tekenfilms:frozen-2013")
+        self.assertEqual(build_catalog_meta(meta)["id"], "tt2294629")
         self.assertEqual(build_catalog_meta(meta)["logo"], "https://image.tmdb.org/t/p/w500/logo.png")
+
+    def test_merges_imdb_rating_and_formats_runtime(self):
+        self.assertEqual(format_runtime(102), "1h42min")
+        meta = merge_rating({"id": "tt2294629"}, {"averageRating": 7.4, "numVotes": 123456})
+        self.assertEqual(meta["imdbRating"], "7.4")
+        self.assertEqual(meta["imdbRatingCount"], 123456)
+
+    def test_builds_dutch_top_posters_url(self):
+        self.assertEqual(
+            build_poster_url("https://api.top-posters.com", "TP-test", "tt2294629"),
+            "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg?lang=nl-NL",
+        )
+        self.assertEqual(
+            build_poster_url("https://api.top-posters.com", "TP-test", "tt2294629", None),
+            "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg",
+        )
 
     def test_write_outputs_supports_preview_and_write(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -13,6 +13,7 @@ test("builds stable movie ids", () => {
   assert.equal(idToSlug("tekenfilms:frozen-2013"), "frozen-2013");
 });
 
-test("rejects ids without the addon prefix", () => {
-  assert.equal(idToSlug("tt2294629"), null);
+test("uses IMDb ids directly as metadata slugs", () => {
+  assert.equal(idToSlug("tt2294629"), "tt2294629");
+  assert.equal(idToSlug("tmdb:109445"), "tmdb-109445");
 });

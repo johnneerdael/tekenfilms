@@ -1,0 +1,389 @@
+FORMAT: 1A
+
+# Nexio IMDb API
+
+Internal, non-commercial IMDb dataset API for Nexio providing ratings and title search.
+
+Every `/v1/*` route requires an API key via `X-API-Key` or `Authorization: Bearer`.
+Authenticated routes can return `401` for missing or invalid keys, `429` when the per-key rate limit is exceeded, and `500` for unexpected server faults.
+
+# Group Platform
+
+## Health Check [/healthz]
+
+### Get Health [GET]
+
++ Response 200 (application/json)
+
+    + Attributes (HealthResponse)
+
+## Readiness Check [/readyz]
+
+### Get Readiness [GET]
+
++ Response 200 (application/json)
+    + Attributes (ReadinessResponse)
+
++ Response 503 (application/json)
+    + Attributes (ErrorEnvelope)
+
+## Snapshot Metadata [/v1/meta/snapshots]
+
+### List Snapshots [GET]
+
++ Response 200 (application/json)
+    + Attributes (SnapshotsResponse)
+
++ Response 401 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+    + Headers
+
+            Retry-After: 1
+
+    + Attributes (ErrorEnvelope)
+
++ Response 500 (application/json)
+    + Attributes (ErrorEnvelope)
+
+## Dataset Stats [/v1/meta/stats]
+
+### Get Stats [GET]
+
++ Response 200 (application/json)
+    + Attributes (Stats)
+
++ Response 401 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+    + Headers
+
+            Retry-After: 1
+
+    + Attributes (ErrorEnvelope)
+
++ Response 500 (application/json)
+    + Attributes (ErrorEnvelope)
+
+# Group Ratings
+
+## Title Rating [/v1/ratings/{tconst}{?episodes}]
+
++ Parameters
+    + tconst: `tt32459853` (string, required) - IMDb title identifier.
+    + episodes (string, optional) - Set to `true` to return the `RatingWithEpisodes` wrapper. Any other value is ignored.
+
+### Get Rating [GET]
+
+Set `episodes=true` to receive the wrapper form with `requestTconst`, optional `rating`, optional `episodesParentTconst`, and `episodes`.
+
++ Response 200 (application/json)
+    + Attributes (Rating)
+
++ Response 404 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 401 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+    + Headers
+
+            Retry-After: 1
+
+    + Attributes (ErrorEnvelope)
+
++ Response 500 (application/json)
+    + Attributes (ErrorEnvelope)
+
+## Ratings Bulk [/v1/ratings/bulk{?episodes}]
+
++ Parameters
+    + episodes (string, optional) - Set to `true` to make each result use the `RatingWithEpisodes` wrapper. Any other value is ignored.
+
+### Bulk Get Ratings [POST]
+
+Set `episodes=true` to make each entry in `results` use the `RatingWithEpisodes` wrapper. `missing` still records identifiers that were not found.
+
+The request body must contain only the `identifiers` property. Empty arrays, arrays with more than 250 entries, blank identifiers, malformed JSON, unknown fields, and trailing JSON return `400`.
+
++ Request (application/json)
+    + Attributes (BulkRatingsRequest)
+
++ Response 200 (application/json)
+    + Attributes (BulkRatingsResponse)
+
++ Response 400 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 401 (application/json)
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+    + Headers
+
+            Retry-After: 1
+
+    + Attributes (ErrorEnvelope)
+
++ Response 500 (application/json)
+    + Attributes (ErrorEnvelope)
+
+# Group Titles
+
+## Titles Search [/v1/titles/search{?q,types,limit}]
+
+### Search titles [GET]
+
+Search IMDb titles by substring. Results are limited to titles with ratings data (`num_votes > 0`) and ranked by popularity, then start year, then title.
+
+The implementation searches `primary_title` with a case-insensitive substring match. Results are ordered by IMDb vote count descending, then `startYear` descending with unknown years last, then `primaryTitle` ascending.
+
++ Parameters
+    + q: `matrix` (string, required) - Search query. Minimum length 2 characters.
+    + types: `movie,tvSeries` (string, optional) - Comma-separated content types to include. Allowed values: `movie`, `tvSeries`. Defaults to both.
+    + limit: `10` (number, optional) - Maximum number of results to return. Range 1–50. Default 10.
+
++ Request (application/json)
+    + Headers
+
+            X-API-Key: abcdef12.00112233445566778899aabbccddeeff0011223344556677
+
++ Response 200 (application/json)
+    + Headers
+
+            Cache-Control: public, max-age=60, stale-while-revalidate=300
+
+    + Attributes (TitleSearchResponse)
+
++ Response 400 (application/json)
+
+    Returned when `q` is shorter than 2 characters, `types` contains an unrecognised value, or `limit` is outside the 1–50 range.
+
+    + Attributes (ErrorEnvelope)
+
++ Response 401 (application/json)
+
+    Returned when the `X-API-Key` header is missing or the key fails validation.
+
+    + Attributes (ErrorEnvelope)
+
++ Response 429 (application/json)
+
+    Returned when the rate limit for the API key is exceeded.
+
+    + Headers
+
+            Retry-After: 1
+
+    + Attributes (ErrorEnvelope)
+
++ Response 500 (application/json)
+    + Attributes (ErrorEnvelope)
+
+# Group WebSocket
+
+## WebSocket Streaming Search [/v1/ws]
+
+API Blueprint has no native WebSocket grammar. This section documents the `/v1/ws` endpoint using descriptive prose and JSON frame examples.
+
+### Overview
+
+`GET /v1/ws` upgrades an HTTP connection to WebSocket and provides the same title-search capability as `GET /v1/titles/search`, optimised for typeahead. The connection is persistent, the server cancels superseded in-flight queries automatically, and only one search can be in flight per socket at a time.
+
+### Upgrade Request
+
+The client initiates a standard HTTP Upgrade:
+
+```
+GET /v1/ws HTTP/1.1
+Host: api.nexioapp.org
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: <base64-nonce>
+Sec-WebSocket-Version: 13
+X-API-Key: abcdef12.00112233445566778899aabbccddeeff0011223344556677
+```
+
+Alternatively use `Authorization: Bearer <key>` in place of `X-API-Key`. Both header forms are identical to the REST authentication model.
+
+### Authentication
+
+Authentication is evaluated on the Upgrade request using the same `X-API-Key` / `Authorization: Bearer` mechanism as every `/v1/*` REST route. A missing or invalid key returns `401` before the upgrade completes. A valid key that has exhausted its rate-limit bucket returns `429`.
+
+**Browser note**: browsers cannot set arbitrary HTTP headers on `new WebSocket(url)`. The recommended workaround is to obtain a short-lived session cookie through the portal's auth flow, or route WebSocket connections through an authorization-proxy that injects the header. Node.js and CLI clients can set `X-API-Key` directly on the Upgrade request.
+
+### Rate Limits
+
+- The Upgrade request counts as one call against the same token-bucket quota used by REST requests. A `429` on the Upgrade means the bucket was empty.
+- A maximum of **5 concurrent open WebSocket connections** per API key is permitted. A 6th concurrent connection is rejected with `429` at Upgrade time.
+- After a successful Upgrade, individual client messages are **not** metered against the REST quota. Each socket has a local token bucket with a burst of 20 messages and a refill rate of 20 messages per second. Excess `search` messages receive a `{"type":"error","code":"rate_limited","message":"message rate too high"}` frame; the socket remains open.
+
+### Message Protocol
+
+All frames are UTF-8 text frames carrying JSON objects. Binary frames are not used.
+
+#### Client → Server
+
+**search** — submit or replace the current query. Sending a new `search` frame while a previous query is in flight cancels the previous query server-side.
+
+```json
+{"type":"search","seq":1,"q":"matrix","types":["movie","tvSeries"]}
+```
+
+The WebSocket endpoint always returns at most 10 results. Clients needing larger result sets should use `GET /v1/titles/search`.
+
+| Field    | Type           | Required | Default              | Notes                                                        |
+|----------|----------------|----------|----------------------|--------------------------------------------------------------|
+| `type`   | string         | yes      | —                    | Must be `"search"`.                                          |
+| `seq`    | uint64         | yes      | —                    | Client-supplied monotonic counter. Echoed verbatim in reply. |
+| `q`      | string         | yes      | —                    | Search query. Trimmed. Minimum 2 characters.                 |
+| `types`  | array[string]  | no       | `["movie","tvSeries"]` | Allowed values: `"movie"`, `"tvSeries"`.                  |
+
+**ping** — keepalive probe. The server replies with a `pong` frame carrying the same `seq`.
+
+```json
+{"type":"ping","seq":2}
+```
+
+#### Server → Client
+
+**result** — search completed. `results` and `meta` are identical in shape to the REST `/v1/titles/search` response.
+
+```json
+{"type":"result","seq":1,"results":[{"tconst":"tt0133093","titleType":"movie","primaryTitle":"The Matrix","startYear":1999}],"meta":{"snapshotId":42,"count":1}}
+```
+
+**cancelled** — emitted when a new `search` frame arrived before the previous query finished. `seq` echoes the cancelled query's sequence number.
+
+```json
+{"type":"cancelled","seq":1}
+```
+
+**error** — the request was rejected or a server fault occurred. `seq` echoes the triggering message's sequence number.
+
+```json
+{"type":"error","seq":1,"code":"invalid_request","message":"q must be at least 2 characters"}
+```
+
+```json
+{"type":"error","seq":0,"code":"invalid_request","message":"invalid JSON"}
+```
+
+```json
+{"type":"error","seq":1,"code":"invalid_request","message":"unknown message type"}
+```
+
+| `code`             | Meaning                                                                        |
+|--------------------|--------------------------------------------------------------------------------|
+| `invalid_request`  | Invalid JSON, unknown message type, `q` too short, or unknown `types` value.   |
+| `rate_limited`     | Local per-socket message-rate ceiling exceeded. Socket stays open.             |
+| `internal_error`   | Unexpected server fault while processing a search.                             |
+
+**pong** — reply to a `ping`. `seq` echoes the ping's sequence number.
+
+```json
+{"type":"pong","seq":2}
+```
+
+### In-Flight Query Semantics
+
+Only one `search` can be in flight per socket at a time. When the client sends a second `search` before the first has resolved:
+
+1. The server cancels the first query.
+2. The server emits `{"type":"cancelled","seq":<prior-seq>}`.
+3. The server begins processing the new query and eventually emits `{"type":"result","seq":<new-seq>,...}`.
+
+### WebSocket Close Codes
+
+| Code   | Meaning                                                                          |
+|--------|----------------------------------------------------------------------------------|
+| `1000` | Normal closure. The read loop closes with normal closure when the connection ends. |
+| `1001` | Going away. The server uses this when the protocol ping keepalive times out.      |
+
+# Data Structures
+
+## HealthResponse (object)
++ status: ok (string, required)
+
+## ReadinessResponse (object)
++ status: ready (string, required)
+
+## ErrorEnvelope (object)
++ error (ErrorDetails, required)
+
+## ErrorDetails (object)
++ code: invalid_request (string, required)
++ message: request parameters are invalid (string, required)
+
+## SnapshotsResponse (object)
++ items (array[Snapshot], required)
+
+## Stats (object)
++ ratings: 1600000 (number, required)
++ episodes: 6200000 (number, required)
++ snapshots: 12 (number, required)
+
+## Snapshot (object)
++ id: 1 (number, required)
++ dataset: title.ratings.tsv.gz (string, required)
++ status: active (string, required)
++ syncMode: delta (string, optional)
++ datasetVersion: 2026-03-22 (string, optional)
++ importedAt: 2026-03-22T18:02:11Z (string, required)
++ sourceUpdatedAt: 2026-03-22T12:34:20Z (string, optional)
++ sourceETag: W/"etag-value" (string, optional)
++ isActive: true (boolean, required)
++ ratingCount: 1600000 (number, required)
++ episodeCount: 6200000 (number, required)
++ notes: Imported successfully. (string, optional)
++ sourceUrl: https://datasets.imdbws.com/title.ratings.tsv.gz (string, optional)
++ completedAt: 2026-03-22T18:05:00Z (string, optional)
+
+## Rating (object)
++ tconst: tt32459853 (string, required)
++ averageRating: 7.8 (number, required)
++ numVotes: 1500 (number, required)
+
+## EpisodeRating (object)
++ tconst: tt32459853 (string, required)
++ parentTconst: tt27444205 (string, required)
++ seasonNumber: 1 (number, optional)
++ episodeNumber: 2 (number, optional)
++ averageRating: 7.8 (number, required)
++ numVotes: 1500 (number, required)
+
+## RatingWithEpisodes (object)
++ requestTconst: tt27444205 (string, required)
++ rating (Rating, optional)
++ episodesParentTconst: tt27444205 (string, optional)
++ episodes (array[EpisodeRating], required)
+
+## BulkRatingsRequest (object)
++ identifiers (array[string], required) - One to 250 non-blank IMDb title identifiers. Values are trimmed before lookup.
+    + tt32459853
+    + tt0944947
+
+## BulkRatingsResponse (object)
++ results (array[Rating], required)
++ missing (array[string], required)
+
+## BulkRatingsWithEpisodesResponse (object)
++ results (array[RatingWithEpisodes], required)
++ missing (array[string], required)
+
+## TitleSearchResponse (object)
++ results (array[TitleSearchResult], required)
++ meta (TitleSearchMeta, required)
+
+## TitleSearchResult (object)
++ tconst: tt0133093 (string, required)
++ titleType: movie (string, required) - `movie` or `tvSeries`.
++ primaryTitle: The Matrix (string, required)
++ startYear: 1999 (number, optional) - Omitted when the title has no known start year.
+
+## TitleSearchMeta (object)
++ snapshotId: 42 (number, required)
++ count: 1 (number, required)

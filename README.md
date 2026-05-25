@@ -6,25 +6,29 @@ The addon exposes one Stremio movie catalog:
 
 - `Tekenfilms (Nederlands)`
 
-Runtime metadata is local JSON. Use the generator first to match files in `NL/` against TMDB, review the report, then write `data/catalog.json` and `data/meta/*.json`.
+Runtime metadata is local JSON. Use the generator first to match files in `NL/` against TMDB, enrich them with IMDb ratings, download self-hosted posters, review the report, then write `data/catalog.json`, `data/meta/*.json`, and `data/posters/*.jpg`.
 
 ## Requirements
 
 - Node.js 20+
 - Python 3.9+
 - Docker, if running the container
-- TMDB API key in `.env`
+- TMDB, IMDb ratings, and TOP Posters API keys in `.env`
 
 Create `.env`:
 
 ```env
 TMDB_API_KEY=your_tmdb_key
 TMDB_API_URL=https://api.themoviedb.org/3/
+IMDBRATINGS_API_URL=https://your-imdb-ratings-api
+IMDBRATINGS_API_KEY=your_imdb_ratings_key
+TOPPOSTER_API_URL=https://api.top-posters.com
+TOPPOSTER_API_KEY=your_top_posters_key
 BASE_URL=https://tekenfilms.nexioapp.org
 PORT=7010
 ```
 
-`BASE_URL` should be the public URL Stremio will use for stream links.
+`BASE_URL` should be the public URL Stremio will use for stream and poster links.
 
 ## Directory Layout
 
@@ -34,7 +38,8 @@ PORT=7010
 ├── data/
 │   ├── catalog.json            # generated catalog index
 │   ├── manual-matches.json     # manual TMDB match overrides
-│   └── meta/                   # generated movie metadata
+│   ├── meta/                   # generated movie metadata
+│   └── posters/                # downloaded self-hosted TOP Posters images
 ├── scripts/
 │   ├── generate-metadata.js    # Node generator
 │   └── generate_metadata.py    # Python preview/write generator
@@ -76,7 +81,7 @@ Run the Python preview generator before starting the addon:
 npm run generate:preview
 ```
 
-This scans `NL/`, queries TMDB, and writes:
+This scans `NL/`, queries TMDB, enriches matches with IMDb ratings when available, and writes:
 
 ```text
 data/generation-report.json
@@ -129,7 +134,10 @@ This writes:
 ```text
 data/catalog.json
 data/meta/<movie-slug>.json
+data/posters/<imdb-id>.jpg
 ```
+
+Poster URLs in metadata always point at the addon host, for example `https://tekenfilms.nexioapp.org/posters/tt2294629.jpg`. The generator fetches TOP Posters with `lang=nl-NL` first and retries without `lang` when no Dutch poster is returned.
 
 The Node generator is also available:
 

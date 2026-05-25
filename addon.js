@@ -25,12 +25,12 @@ const manifest = {
     {
       name: "meta",
       types: ["movie"],
-      idPrefixes: [ID_PREFIX]
+      idPrefixes: ["tt", "tmdb:", ID_PREFIX]
     },
     {
       name: "stream",
       types: ["movie"],
-      idPrefixes: [ID_PREFIX]
+      idPrefixes: ["tt", "tmdb:", ID_PREFIX]
     }
   ],
   catalogs: [

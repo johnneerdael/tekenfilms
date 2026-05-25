@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const { getRouter } = require("stremio-addon-sdk");
 const { addonInterface, manifest } = require("./addon");
-const { DEFAULT_PORT, NL_DIR } = require("./lib/constants");
+const { DEFAULT_PORT, NL_DIR, POSTER_DIR } = require("./lib/constants");
 
 function createApp() {
   const app = express();
@@ -30,6 +30,14 @@ function createApp() {
     index: false,
     setHeaders(res) {
       res.setHeader("Cache-Control", "public, max-age=86400");
+    }
+  }));
+
+  app.use("/posters", express.static(POSTER_DIR, {
+    fallthrough: true,
+    index: false,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=604800");
     }
   }));
 

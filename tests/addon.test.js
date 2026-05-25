@@ -40,26 +40,26 @@ test("catalog handler ignores unknown catalogs", async () => {
 
 test("meta handler reads generated meta", async () => {
   const handlers = createHandlers({
-    loadMeta: slug => slug === "frozen-2013" ? { id: "tekenfilms:frozen-2013", type: "movie", name: "Frozen" } : null
+    loadMeta: slug => slug === "tt2294629" ? { id: "tt2294629", type: "movie", name: "Frozen" } : null
   });
 
-  assert.deepEqual(await handlers.meta({ type: "movie", id: "tekenfilms:frozen-2013" }), {
-    meta: { id: "tekenfilms:frozen-2013", type: "movie", name: "Frozen" },
+  assert.deepEqual(await handlers.meta({ type: "movie", id: "tt2294629" }), {
+    meta: { id: "tt2294629", type: "movie", name: "Frozen" },
     cacheMaxAge: 86400
   });
-  assert.deepEqual(await handlers.meta({ type: "movie", id: "tt2294629" }), { meta: null });
+  assert.deepEqual(await handlers.meta({ type: "movie", id: "bad-id" }), { meta: null });
 });
 
 test("stream handler returns one direct stream", async () => {
   const handlers = createHandlers({
     getBaseUrl: () => "https://tekenfilms.nexioapp.org",
-    loadMeta: slug => slug === "frozen-2013" ? {
-      id: "tekenfilms:frozen-2013",
+    loadMeta: slug => slug === "tt2294629" ? {
+      id: "tt2294629",
       videoFilename: "Frozen.2013.BluRay.NL.avi"
     } : null
   });
 
-  assert.deepEqual(await handlers.stream({ type: "movie", id: "tekenfilms:frozen-2013" }), {
+  assert.deepEqual(await handlers.stream({ type: "movie", id: "tt2294629" }), {
     streams: [
       {
         title: "NL Gesproken",
