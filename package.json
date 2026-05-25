@@ -1,0 +1,19 @@
+{
+  "name": "tekenfilms",
+  "version": "0.1.0",
+  "description": "No-configuration Stremio addon for Dutch-audio cartoon movies from local files.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "generate": "node scripts/generate-metadata.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3",
+    "stremio-addon-sdk": "latest"
+  }
+}

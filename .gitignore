@@ -1,0 +1,4 @@
+node_modules/
+.env
+data/generation-report.json
+data/meta/*.json
