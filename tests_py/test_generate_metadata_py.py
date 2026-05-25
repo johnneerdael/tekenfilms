@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 from scripts.generate_metadata import (
+    add_meta_or_duplicate,
     apply_manual_match,
+    build_query_candidates,
     build_catalog_meta,
     build_movie_id,
     build_stremio_meta,
@@ -81,6 +83,72 @@ class GenerateMetadataPythonTests(unittest.TestCase):
                 ],
             )
         )
+
+    def test_chooses_near_year_for_exact_title_release_date_differences(self):
+        self.assertEqual(
+            choose_tmdb_result(
+                {"title": "De Drie Caballeros", "year": 1945},
+                [{"id": 15947, "title": "De Drie Caballeros", "release_date": "1944-12-21"}],
+            )["id"],
+            15947,
+        )
+
+    def test_chooses_single_exact_title_without_year(self):
+        self.assertEqual(
+            choose_tmdb_result(
+                {"title": "101 Echte Dalmatiërs", "year": None},
+                [
+                    {"id": 11674, "title": "101 Echte Dalmatiërs", "release_date": "1996-11-27"},
+                    {"id": 10481, "title": "102 Echte Dalmatiërs", "release_date": "2000-10-07"},
+                ],
+            )["id"],
+            11674,
+        )
+
+    def test_chooses_dominant_exact_title_without_year(self):
+        self.assertEqual(
+            choose_tmdb_result(
+                {"title": "Chicken Little", "year": None},
+                [
+                    {"id": 9982, "title": "Chicken Little", "release_date": "2005-11-04", "popularity": 6.0},
+                    {"id": 928883, "title": "Chicken Little", "release_date": "1998-02-23", "popularity": 1.0},
+                    {"id": 64648, "title": "Chicken Little", "release_date": "1943-12-17", "popularity": 0.5},
+                ],
+            )["id"],
+            9982,
+        )
+
+    def test_chooses_unique_exact_title_even_when_filename_year_is_wrong(self):
+        self.assertEqual(
+            choose_tmdb_result(
+                {"title": "Suske en Wiske De Duistere Diamant", "year": 2014},
+                [{"id": 56344, "title": "Suske en Wiske: De duistere diamant", "release_date": "2004-02-14"}],
+            )["id"],
+            56344,
+        )
+
+    def test_builds_query_candidates_for_known_title_variants(self):
+        self.assertIn("Meet the Robinsons", build_query_candidates("Meet the Robonsons"))
+        self.assertIn("Oliver & Co", build_query_candidates("Oliver en Co"))
+        self.assertIn("De Reddertjes in Kangoeroeland", build_query_candidates("De Reddertjes in Kangeroeland"))
+        self.assertIn("The Tigger Movie", build_query_candidates("Tijgetjes Film"))
+
+    def test_duplicate_sources_are_reported_without_failing_generation(self):
+        metas = [{"id": "tekenfilms:toy-story-1995", "videoFilename": "Toy Story (1995).m4v"}]
+        seen_ids = {"tekenfilms:toy-story-1995": "Toy Story (1995).m4v"}
+        duplicates = []
+
+        added = add_meta_or_duplicate(
+            {"id": "tekenfilms:toy-story-1995", "videoFilename": "Toy.Story.1995.DVD.NL.avi"},
+            seen_ids,
+            metas,
+            duplicates,
+        )
+
+        self.assertFalse(added)
+        self.assertEqual(len(metas), 1)
+        self.assertEqual(duplicates[0]["filename"], "Toy.Story.1995.DVD.NL.avi")
+        self.assertEqual(duplicates[0]["conflictsWith"], "Toy Story (1995).m4v")
 
     def test_builds_metadata_shapes(self):
         meta = build_stremio_meta(

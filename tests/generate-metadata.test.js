@@ -2,7 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  addMetaOrDuplicate,
   applyManualMatch,
+  buildQueryCandidates,
   chooseTmdbResult,
   buildStremioMeta,
   buildCatalogMeta,
@@ -43,6 +45,74 @@ test("rejects ambiguous TMDB results", () => {
       { id: 2, title: "Frozen", release_date: "2013-11-27" }
     ]
   ), null);
+});
+
+test("chooses near year for exact title release date differences", () => {
+  const result = chooseTmdbResult(
+    { title: "De Drie Caballeros", year: 1945 },
+    [{ id: 15947, title: "De Drie Caballeros", release_date: "1944-12-21" }]
+  );
+
+  assert.equal(result.id, 15947);
+});
+
+test("chooses single exact title without year", () => {
+  const result = chooseTmdbResult(
+    { title: "101 Echte Dalmatiërs", year: null },
+    [
+      { id: 11674, title: "101 Echte Dalmatiërs", release_date: "1996-11-27" },
+      { id: 10481, title: "102 Echte Dalmatiërs", release_date: "2000-10-07" }
+    ]
+  );
+
+  assert.equal(result.id, 11674);
+});
+
+test("chooses dominant exact title without year", () => {
+  const result = chooseTmdbResult(
+    { title: "Chicken Little", year: null },
+    [
+      { id: 9982, title: "Chicken Little", release_date: "2005-11-04", popularity: 6.0 },
+      { id: 928883, title: "Chicken Little", release_date: "1998-02-23", popularity: 1.0 },
+      { id: 64648, title: "Chicken Little", release_date: "1943-12-17", popularity: 0.5 }
+    ]
+  );
+
+  assert.equal(result.id, 9982);
+});
+
+test("chooses unique exact title even when filename year is wrong", () => {
+  const result = chooseTmdbResult(
+    { title: "Suske en Wiske De Duistere Diamant", year: 2014 },
+    [{ id: 56344, title: "Suske en Wiske: De duistere diamant", release_date: "2004-02-14" }]
+  );
+
+  assert.equal(result.id, 56344);
+});
+
+test("builds query candidates for known title variants", () => {
+  assert.ok(buildQueryCandidates("Meet the Robonsons").includes("Meet the Robinsons"));
+  assert.ok(buildQueryCandidates("Oliver en Co").includes("Oliver & Co"));
+  assert.ok(buildQueryCandidates("De Reddertjes in Kangeroeland").includes("De Reddertjes in Kangoeroeland"));
+  assert.ok(buildQueryCandidates("Tijgetjes Film").includes("The Tigger Movie"));
+});
+
+test("duplicate sources are reported without failing generation", () => {
+  const metas = [{ id: "tekenfilms:toy-story-1995", videoFilename: "Toy Story (1995).m4v" }];
+  const seenIds = new Map([["tekenfilms:toy-story-1995", "Toy Story (1995).m4v"]]);
+  const duplicates = [];
+
+  const added = addMetaOrDuplicate(
+    { id: "tekenfilms:toy-story-1995", videoFilename: "Toy.Story.1995.DVD.NL.avi" },
+    seenIds,
+    metas,
+    duplicates
+  );
+
+  assert.equal(added, false);
+  assert.equal(metas.length, 1);
+  assert.equal(duplicates[0].filename, "Toy.Story.1995.DVD.NL.avi");
+  assert.equal(duplicates[0].conflictsWith, "Toy Story (1995).m4v");
 });
 
 test("builds full Stremio metadata", () => {

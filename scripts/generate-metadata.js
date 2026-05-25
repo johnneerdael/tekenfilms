@@ -58,6 +58,19 @@ function getYear(releaseDate) {
   return match ? Number(match[1]) : null;
 }
 
+function comparableTitle(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function titlesMatch(parsedTitle, result) {
+  const wanted = comparableTitle(parsedTitle);
+  return [result.title, result.original_title].map(comparableTitle).includes(wanted);
+}
+
 function applyManualMatch(parsed, manualMatches) {
   const override = manualMatches[parsed.filename];
   if (!override) return parsed;
@@ -66,10 +79,52 @@ function applyManualMatch(parsed, manualMatches) {
 
 function chooseTmdbResult(parsed, results) {
   if (!Array.isArray(results) || results.length === 0) return null;
+  const exactMatches = results.filter(result => titlesMatch(parsed.title, result));
   if (parsed.year) {
-    return results.find(result => getYear(result.release_date) === parsed.year) || null;
+    const exactYear = results.find(result => getYear(result.release_date) === parsed.year);
+    if (exactYear) return exactYear;
+    const nearYear = exactMatches.find(result => {
+      const year = getYear(result.release_date);
+      return year !== null && Math.abs(year - parsed.year) <= 1;
+    });
+    if (nearYear) return nearYear;
+    return exactMatches.length === 1 ? exactMatches[0] : null;
+  }
+  if (exactMatches.length === 1) return exactMatches[0];
+  if (exactMatches.length > 1) {
+    const ranked = exactMatches
+      .slice()
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+    const top = ranked[0].popularity || 0;
+    const second = ranked[1].popularity || 0;
+    if (top >= 1 && top >= second * 2) return ranked[0];
   }
   return results.length === 1 ? results[0] : null;
+}
+
+function uniqueValues(values) {
+  const seen = new Set();
+  const unique = [];
+  values.forEach(value => {
+    if (value && !seen.has(value)) {
+      seen.add(value);
+      unique.push(value);
+    }
+  });
+  return unique;
+}
+
+function buildQueryCandidates(title) {
+  const aliases = {
+    "De Reddertjes in Kangeroeland": ["De Reddertjes in Kangoeroeland", "The Rescuers Down Under"],
+    "Meet the Robonsons": ["Meet the Robinsons"],
+    "Tijgetjes Film": ["Tigger Movie", "The Tigger Movie"],
+    "Suske en Wiske De Duistere Diamant": ["Suske Wiske Duistere Diamant", "De duistere diamant"]
+  };
+  const candidates = [title];
+  if (title.includes(" en ")) candidates.push(title.replace(" en ", " & "));
+  candidates.push(...(aliases[title] || []));
+  return uniqueValues(candidates);
 }
 
 async function tmdbRequest(pathname, params = {}) {
@@ -100,13 +155,21 @@ async function findTmdbDetails(parsed) {
     });
   }
 
-  const search = await tmdbRequest("/search/movie", {
-    language: "nl-NL",
-    query: parsed.title,
-    year: parsed.year || undefined,
-    include_adult: "false"
-  });
-  const result = chooseTmdbResult(parsed, search.results || []);
+  let result = null;
+  for (const query of buildQueryCandidates(parsed.title)) {
+    const queryParsed = { ...parsed, title: query };
+    for (const includeYear of [true, false]) {
+      const search = await tmdbRequest("/search/movie", {
+        language: "nl-NL",
+        query,
+        year: includeYear ? parsed.year || undefined : undefined,
+        include_adult: "false"
+      });
+      result = chooseTmdbResult(queryParsed, search.results || []);
+      if (result) break;
+    }
+    if (result) break;
+  }
   if (!result) return null;
 
   return tmdbRequest(`/movie/${result.id}`, {
@@ -171,10 +234,26 @@ function scanVideoFiles(nlDir = NL_DIR) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function addMetaOrDuplicate(meta, seenIds, metas, duplicates) {
+  if (seenIds.has(meta.id)) {
+    duplicates.push({
+      filename: meta.videoFilename,
+      reason: "duplicate generated id",
+      id: meta.id,
+      conflictsWith: seenIds.get(meta.id)
+    });
+    return false;
+  }
+  seenIds.set(meta.id, meta.videoFilename);
+  metas.push(meta);
+  return true;
+}
+
 async function generate() {
   const manualMatches = readJson(path.join(DATA_DIR, "manual-matches.json"), {});
   const filenames = scanVideoFiles();
   const failures = [];
+  const duplicates = [];
   const metas = [];
   const seenIds = new Map();
 
@@ -188,12 +267,7 @@ async function generate() {
       }
 
       const meta = buildStremioMeta({ parsed, details });
-      if (seenIds.has(meta.id)) {
-        failures.push({ filename, reason: "duplicate generated id", id: meta.id, conflictsWith: seenIds.get(meta.id) });
-        continue;
-      }
-      seenIds.set(meta.id, filename);
-      metas.push(meta);
+      addMetaOrDuplicate(meta, seenIds, metas, duplicates);
     } catch (error) {
       failures.push({ filename, reason: error.message, parsed });
     }
@@ -204,6 +278,8 @@ async function generate() {
     sourceCount: filenames.length,
     successCount: metas.length,
     failureCount: failures.length,
+    duplicateCount: duplicates.length,
+    duplicates,
     failures
   };
 
@@ -238,6 +314,8 @@ if (require.main === module) {
 
 module.exports = {
   applyManualMatch,
+  addMetaOrDuplicate,
+  buildQueryCandidates,
   chooseTmdbResult,
   buildStremioMeta,
   buildCatalogMeta,

@@ -124,6 +124,20 @@ def get_year(release_date):
     return int(match.group(1)) if match else None
 
 
+def comparable_title(value):
+    value = unicodedata.normalize("NFKD", str(value or ""))
+    value = "".join(char for char in value if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def titles_match(parsed_title, result):
+    wanted = comparable_title(parsed_title)
+    return wanted in {
+        comparable_title(result.get("title")),
+        comparable_title(result.get("original_title")),
+    }
+
+
 def apply_manual_match(parsed, manual_matches):
     override = manual_matches.get(parsed["filename"])
     return {**parsed, **override} if override else parsed
@@ -132,9 +146,56 @@ def apply_manual_match(parsed, manual_matches):
 def choose_tmdb_result(parsed, results):
     if not results:
         return None
+    exact_matches = [result for result in results if titles_match(parsed["title"], result)]
     if parsed.get("year"):
-        return next((result for result in results if get_year(result.get("release_date")) == parsed["year"]), None)
+        exact_year = next((result for result in results if get_year(result.get("release_date")) == parsed["year"]), None)
+        if exact_year:
+            return exact_year
+        near_year = next(
+            (
+                result
+                for result in exact_matches
+                if get_year(result.get("release_date")) is not None
+                and abs(get_year(result.get("release_date")) - parsed["year"]) <= 1
+            ),
+            None,
+        )
+        if near_year:
+            return near_year
+        return exact_matches[0] if len(exact_matches) == 1 else None
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        ranked = sorted(exact_matches, key=lambda result: result.get("popularity") or 0, reverse=True)
+        top = ranked[0].get("popularity") or 0
+        second = ranked[1].get("popularity") or 0
+        if top >= 1 and top >= second * 2:
+            return ranked[0]
     return results[0] if len(results) == 1 else None
+
+
+def unique_values(values):
+    seen = set()
+    unique = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def build_query_candidates(title):
+    aliases = {
+        "De Reddertjes in Kangeroeland": ["De Reddertjes in Kangoeroeland", "The Rescuers Down Under"],
+        "Meet the Robonsons": ["Meet the Robinsons"],
+        "Tijgetjes Film": ["Tigger Movie", "The Tigger Movie"],
+        "Suske en Wiske De Duistere Diamant": ["Suske Wiske Duistere Diamant", "De duistere diamant"],
+    }
+    candidates = [title]
+    if " en " in title:
+        candidates.append(title.replace(" en ", " & "))
+    candidates.extend(aliases.get(title, []))
+    return unique_values(candidates)
 
 
 def image_url(size, file_path):
@@ -207,16 +268,24 @@ class TmdbClient:
         }
         if parsed.get("tmdbId"):
             return self.request(f"/movie/{parsed['tmdbId']}", params)
-        search = self.request(
-            "/search/movie",
-            {
-                "language": "nl-NL",
-                "query": parsed["title"],
-                "year": parsed.get("year"),
-                "include_adult": "false",
-            },
-        )
-        result = choose_tmdb_result(parsed, search.get("results", []))
+        result = None
+        for query in build_query_candidates(parsed["title"]):
+            query_parsed = {**parsed, "title": query}
+            for include_year in [True, False]:
+                search = self.request(
+                    "/search/movie",
+                    {
+                        "language": "nl-NL",
+                        "query": query,
+                        "year": parsed.get("year") if include_year else None,
+                        "include_adult": "false",
+                    },
+                )
+                result = choose_tmdb_result(query_parsed, search.get("results", []))
+                if result:
+                    break
+            if result:
+                break
         if not result:
             return None
         return self.request(f"/movie/{result['id']}", params)
@@ -242,6 +311,20 @@ def write_outputs(root_dir, metas, report, write):
         write_json(meta_dir / f"{id_to_slug(meta['id'])}.json", meta)
 
 
+def add_meta_or_duplicate(meta, seen_ids, metas, duplicates):
+    if meta["id"] in seen_ids:
+        duplicates.append({
+            "filename": meta["videoFilename"],
+            "reason": "duplicate generated id",
+            "id": meta["id"],
+            "conflictsWith": seen_ids[meta["id"]],
+        })
+        return False
+    seen_ids[meta["id"]] = meta["videoFilename"]
+    metas.append(meta)
+    return True
+
+
 def generate(root_dir, write=False):
     env = {**load_env(root_dir / ".env"), **os.environ}
     blueprints = load_api_blueprints(root_dir)
@@ -251,6 +334,7 @@ def generate(root_dir, write=False):
     filenames = scan_video_files(root_dir / "NL")
     metas = []
     failures = []
+    duplicates = []
     seen_ids = {}
 
     for filename in filenames:
@@ -261,16 +345,7 @@ def generate(root_dir, write=False):
                 failures.append({"filename": filename, "reason": "no confident TMDB match", "parsed": parsed})
                 continue
             meta = build_stremio_meta(parsed, details)
-            if meta["id"] in seen_ids:
-                failures.append({
-                    "filename": filename,
-                    "reason": "duplicate generated id",
-                    "id": meta["id"],
-                    "conflictsWith": seen_ids[meta["id"]],
-                })
-                continue
-            seen_ids[meta["id"]] = filename
-            metas.append(meta)
+            add_meta_or_duplicate(meta, seen_ids, metas, duplicates)
         except Exception as error:
             failures.append({"filename": filename, "reason": str(error), "parsed": parsed})
 
@@ -280,6 +355,7 @@ def generate(root_dir, write=False):
         "sourceCount": len(filenames),
         "successCount": len(metas),
         "failureCount": len(failures),
+        "duplicateCount": len(duplicates),
         "successes": [
             {
                 "filename": meta["videoFilename"],
@@ -291,6 +367,7 @@ def generate(root_dir, write=False):
             }
             for meta in metas
         ],
+        "duplicates": duplicates,
         "failures": failures,
     }
     write_outputs(root_dir, metas, report, write=write and not failures)
@@ -321,6 +398,10 @@ def main():
             print(f"- {failure['filename']}: {failure['reason']}")
         print("See data/generation-report.json for details.")
         return 1
+    if report["duplicates"]:
+        print("Duplicates:")
+        for duplicate in report["duplicates"]:
+            print(f"- {duplicate['filename']} duplicates {duplicate['conflictsWith']}; kept first match")
     if args.write:
         print("Wrote data/catalog.json and data/meta/*.json")
     else:
