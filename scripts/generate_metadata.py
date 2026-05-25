@@ -232,6 +232,13 @@ def build_poster_url(api_url, api_key, imdb_id, lang="nl-NL"):
     return f"{url}?{urlencode({'lang': lang})}" if lang else url
 
 
+def build_ratings_url(api_url):
+    base = normalize_api_url(api_url, "https://api.nexioapp.org/v1")
+    if base.endswith("/v1"):
+        base = base[:-3]
+    return f"{base}/v1/ratings/bulk"
+
+
 def local_poster_url(base_url, identifier):
     return f"{base_url.rstrip().rstrip('/')}/posters/{id_to_slug(identifier)}.jpg"
 
@@ -313,7 +320,7 @@ def build_catalog_meta(meta):
 
 class RatingsClient:
     def __init__(self, api_url, api_key):
-        self.api_url = normalize_api_url(api_url, "https://api.nexioapp.org")
+        self.url = build_ratings_url(api_url)
         self.api_key = api_key
 
     def bulk(self, identifiers):
@@ -321,7 +328,7 @@ class RatingsClient:
         if not ids or not self.api_key:
             return {}
         request = Request(
-            f"{self.api_url}/v1/ratings/bulk",
+            self.url,
             data=json.dumps({"identifiers": ids}).encode("utf-8"),
             headers={"Accept": "application/json", "Content-Type": "application/json", "X-API-Key": self.api_key},
             method="POST",

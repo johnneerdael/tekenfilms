@@ -6,6 +6,7 @@ const {
   applyManualMatch,
   buildQueryCandidates,
   buildPosterUrl,
+  buildRatingsUrl,
   chooseTmdbResult,
   buildStremioMeta,
   buildCatalogMeta,
@@ -173,6 +174,17 @@ test("builds Dutch top-posters URL", () => {
   assert.equal(
     buildPosterUrl("https://api.top-posters.com", "TP-test", "tt2294629", null),
     "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg"
+  );
+});
+
+test("builds ratings URL from root or v1 API base", () => {
+  assert.equal(
+    buildRatingsUrl("https://api.nexioapp.org"),
+    "https://api.nexioapp.org/v1/ratings/bulk"
+  );
+  assert.equal(
+    buildRatingsUrl("https://api.nexioapp.org/v1/"),
+    "https://api.nexioapp.org/v1/ratings/bulk"
   );
 });
 

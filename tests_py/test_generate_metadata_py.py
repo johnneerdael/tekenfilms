@@ -10,6 +10,7 @@ from scripts.generate_metadata import (
     build_query_candidates,
     build_catalog_meta,
     build_movie_id,
+    build_ratings_url,
     build_stremio_meta,
     choose_tmdb_result,
     format_runtime,
@@ -199,6 +200,16 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertEqual(
             build_poster_url("https://api.top-posters.com", "TP-test", "tt2294629", None),
             "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg",
+        )
+
+    def test_builds_ratings_url_from_root_or_v1_api_base(self):
+        self.assertEqual(
+            build_ratings_url("https://api.nexioapp.org"),
+            "https://api.nexioapp.org/v1/ratings/bulk",
+        )
+        self.assertEqual(
+            build_ratings_url("https://api.nexioapp.org/v1/"),
+            "https://api.nexioapp.org/v1/ratings/bulk",
         )
 
     def test_write_outputs_supports_preview_and_write(self):

@@ -143,6 +143,11 @@ function buildPosterUrl(apiUrl, apiKey, imdbId, lang = "nl-NL") {
   return `${url}?${params.toString()}`;
 }
 
+function buildRatingsUrl(apiUrl) {
+  const base = normalizeApiUrl(apiUrl, "https://api.nexioapp.org/v1");
+  return `${base.replace(/\/v1$/, "")}/v1/ratings/bulk`;
+}
+
 function localPosterUrl(baseUrl, identifier) {
   return `${String(baseUrl || DEFAULT_BASE_URL).trim().replace(/\/+$/, "")}/posters/${idToSlug(identifier)}.jpg`;
 }
@@ -304,10 +309,9 @@ function buildCatalogMeta(meta) {
 async function fetchBulkRatings(identifiers) {
   const ids = identifiers.filter(Boolean);
   const apiKey = process.env.IMDBRATINGS_API_KEY;
-  const apiUrl = normalizeApiUrl(process.env.IMDBRATINGS_API_URL, "https://api.nexioapp.org");
   if (ids.length === 0 || !apiKey) return new Map();
 
-  const response = await fetch(`${apiUrl}/v1/ratings/bulk`, {
+  const response = await fetch(buildRatingsUrl(process.env.IMDBRATINGS_API_URL), {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -470,6 +474,7 @@ module.exports = {
   buildStremioMeta,
   buildCatalogMeta,
   buildPosterUrl,
+  buildRatingsUrl,
   formatRuntime,
   loadApiBlueprints,
   mergeRating,
