@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   addMetaOrDuplicate,
   applyManualMatch,
+  buildPosterRequestHeaders,
   buildQueryCandidates,
   buildPosterUrl,
   buildRatingsUrl,
@@ -175,6 +176,12 @@ test("builds Dutch top-posters URL", () => {
     buildPosterUrl("https://api.top-posters.com", "TP-test", "tt2294629", null),
     "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg"
   );
+});
+
+test("builds top-posters request headers accepted by CDN", () => {
+  const headers = buildPosterRequestHeaders();
+  assert.equal(headers.Accept, "image/jpeg,image/*,*/*");
+  assert.match(headers["User-Agent"], /Mozilla/);
 });
 
 test("builds ratings URL from root or v1 API base", () => {

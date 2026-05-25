@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.generate_metadata import (
     add_meta_or_duplicate,
     apply_manual_match,
+    build_poster_request_headers,
     build_poster_url,
     build_query_candidates,
     build_catalog_meta,
@@ -201,6 +202,11 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             build_poster_url("https://api.top-posters.com", "TP-test", "tt2294629", None),
             "https://api.top-posters.com/TP-test/imdb/poster/tt2294629.jpg",
         )
+
+    def test_builds_top_posters_request_headers_accepted_by_cdn(self):
+        headers = build_poster_request_headers()
+        self.assertEqual(headers["Accept"], "image/jpeg,image/*,*/*")
+        self.assertIn("Mozilla", headers["User-Agent"])
 
     def test_builds_ratings_url_from_root_or_v1_api_base(self):
         self.assertEqual(

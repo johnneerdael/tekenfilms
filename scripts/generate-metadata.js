@@ -143,6 +143,13 @@ function buildPosterUrl(apiUrl, apiKey, imdbId, lang = "nl-NL") {
   return `${url}?${params.toString()}`;
 }
 
+function buildPosterRequestHeaders() {
+  return {
+    Accept: "image/jpeg,image/*,*/*",
+    "User-Agent": "Mozilla/5.0 (compatible; TekenfilmsMetadataGenerator/0.1; +https://tekenfilms.nexioapp.org)"
+  };
+}
+
 function buildRatingsUrl(apiUrl) {
   const base = normalizeApiUrl(apiUrl, "https://api.nexioapp.org/v1");
   return `${base.replace(/\/v1$/, "")}/v1/ratings/bulk`;
@@ -332,7 +339,7 @@ async function downloadPoster(imdbId, destination) {
 
   for (const lang of ["nl-NL", null]) {
     const response = await fetch(buildPosterUrl(apiUrl, apiKey, imdbId, lang), {
-      headers: { Accept: "image/jpeg,image/*" }
+      headers: buildPosterRequestHeaders()
     }).catch(() => null);
     if (!response || !response.ok) continue;
     const bytes = Buffer.from(await response.arrayBuffer());
@@ -473,6 +480,7 @@ module.exports = {
   chooseTmdbResult,
   buildStremioMeta,
   buildCatalogMeta,
+  buildPosterRequestHeaders,
   buildPosterUrl,
   buildRatingsUrl,
   formatRuntime,

@@ -232,6 +232,13 @@ def build_poster_url(api_url, api_key, imdb_id, lang="nl-NL"):
     return f"{url}?{urlencode({'lang': lang})}" if lang else url
 
 
+def build_poster_request_headers():
+    return {
+        "Accept": "image/jpeg,image/*,*/*",
+        "User-Agent": "Mozilla/5.0 (compatible; TekenfilmsMetadataGenerator/0.1; +https://tekenfilms.nexioapp.org)",
+    }
+
+
 def build_ratings_url(api_url):
     base = normalize_api_url(api_url, "https://api.nexioapp.org/v1")
     if base.endswith("/v1"):
@@ -349,7 +356,7 @@ class PosterClient:
         for lang in ["nl-NL", None]:
             url = build_poster_url(self.api_url, self.api_key, imdb_id, lang)
             try:
-                request = Request(url, headers={"Accept": "image/jpeg"})
+                request = Request(url, headers=build_poster_request_headers())
                 with urlopen(request, timeout=30) as response:
                     if response.status != 200:
                         continue
