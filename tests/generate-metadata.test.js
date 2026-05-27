@@ -1,5 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const {
   addMetaOrDuplicate,
@@ -13,7 +16,8 @@ const {
   buildCatalogMeta,
   formatRuntime,
   mergeRating,
-  loadApiBlueprints
+  loadApiBlueprints,
+  scanVideoFiles
 } = require("../scripts/generate-metadata");
 
 test("applies manual match by filename", () => {
@@ -100,6 +104,27 @@ test("builds query candidates for known title variants", () => {
   assert.ok(buildQueryCandidates("Oliver en Co").includes("Oliver & Co"));
   assert.ok(buildQueryCandidates("De Reddertjes in Kangeroeland").includes("De Reddertjes in Kangoeroeland"));
   assert.ok(buildQueryCandidates("Tijgetjes Film").includes("The Tigger Movie"));
+});
+
+test("scans either flat video files or release subfolders", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tekenfilms-scan-"));
+  fs.writeFileSync(path.join(root, "Frozen.2013.BluRay.NL.avi"), "");
+  fs.mkdirSync(path.join(root, "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM"));
+  fs.writeFileSync(path.join(root, "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM", "aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"), "");
+  fs.writeFileSync(path.join(root, "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM", "aladdin.1992.nfo"), "");
+
+  try {
+    assert.deepEqual(scanVideoFiles(root, "flat"), ["Frozen.2013.BluRay.NL.avi"]);
+    assert.deepEqual(scanVideoFiles(root, "subfolders"), [
+      "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"
+    ]);
+    assert.deepEqual(scanVideoFiles(root, "auto"), [
+      "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv",
+      "Frozen.2013.BluRay.NL.avi"
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("duplicate sources are reported without failing generation", () => {

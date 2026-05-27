@@ -25,10 +25,16 @@ IMDBRATINGS_API_KEY=your_imdb_ratings_key
 TOPPOSTER_API_URL=https://api.top-posters.com
 TOPPOSTER_API_KEY=your_top_posters_key
 BASE_URL=https://tekenfilms.nexioapp.org
+VIDEO_LAYOUT=flat
 PORT=7010
 ```
 
 `BASE_URL` should be the public URL Stremio will use for stream and poster links.
+`VIDEO_LAYOUT` controls how files are discovered in `NL/`:
+
+- `flat`: videos are directly in `NL/`
+- `subfolders`: videos are one level down in release folders
+- `auto`: include both direct videos and videos one level down
 
 ## Directory Layout
 
@@ -72,6 +78,15 @@ Example:
 NL/Frozen.2013.BluRay.NL.avi
 NL/Alice in Wonderland (1951).m4v
 ```
+
+Subfolder layout is also supported:
+
+```text
+NL/Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/
+└── aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv
+```
+
+Set `VIDEO_LAYOUT=subfolders` for this layout, or `VIDEO_LAYOUT=auto` while migrating between layouts.
 
 ## Preview Metadata Matches
 

@@ -414,10 +414,30 @@ class TmdbClient:
         return self.request(f"/movie/{result['id']}", params)
 
 
-def scan_video_files(nl_dir):
+def resolve_video_layout(layout=None):
+    return (layout or os.environ.get("VIDEO_LAYOUT") or os.environ.get("NL_LAYOUT") or "flat").lower()
+
+
+def scan_video_files(nl_dir, layout=None):
     if not nl_dir.exists():
         raise RuntimeError(f"Missing local video directory: {nl_dir}")
-    return sorted(path.name for path in nl_dir.iterdir() if path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS)
+    mode = resolve_video_layout(layout)
+    if mode not in {"flat", "subfolders", "auto"}:
+        raise RuntimeError(f"Unsupported VIDEO_LAYOUT: {mode}")
+
+    entries = []
+    if mode in {"flat", "auto"}:
+        entries.extend(path.name for path in nl_dir.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS)
+    if mode in {"subfolders", "auto"}:
+        for directory in nl_dir.iterdir():
+            if not directory.is_dir():
+                continue
+            entries.extend(
+                path.relative_to(nl_dir).as_posix()
+                for path in directory.iterdir()
+                if path.is_file() and path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS
+            )
+    return sorted(entries)
 
 
 def download_posters(root_dir, metas, poster_client):

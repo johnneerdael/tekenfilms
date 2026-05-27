@@ -61,3 +61,14 @@ test("builds encoded direct stream urls", () => {
     url: "https://tekenfilms.nexioapp.org/nl-gesproken/Alice%20in%20Wonderland%20(1951).m4v"
   });
 });
+
+test("builds encoded stream urls for videos in release subfolders", () => {
+  const stream = buildStreamForMeta({
+    videoFilename: "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"
+  }, "https://tekenfilms.nexioapp.org");
+
+  assert.equal(
+    stream.url,
+    "https://tekenfilms.nexioapp.org/nl-gesproken/Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"
+  );
+});

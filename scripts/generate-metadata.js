@@ -350,12 +350,48 @@ async function downloadPoster(imdbId, destination) {
   return false;
 }
 
-function scanVideoFiles(nlDir = NL_DIR) {
+function resolveVideoLayout(layout) {
+  return String(layout || process.env.VIDEO_LAYOUT || process.env.NL_LAYOUT || "flat").toLowerCase();
+}
+
+function toPosixRelative(baseDir, filePath) {
+  return path.relative(baseDir, filePath).split(path.sep).join("/");
+}
+
+function scanVideoFiles(nlDir = NL_DIR, layout) {
   if (!fs.existsSync(nlDir)) {
     throw new Error(`Missing local video directory: ${nlDir}`);
   }
-  return fs.readdirSync(nlDir)
-    .filter(isSupportedVideoFile)
+  const mode = resolveVideoLayout(layout);
+  const entries = [];
+
+  if (mode === "flat" || mode === "auto") {
+    for (const name of fs.readdirSync(nlDir)) {
+      const filePath = path.join(nlDir, name);
+      if (fs.statSync(filePath).isFile() && isSupportedVideoFile(name)) {
+        entries.push(name);
+      }
+    }
+  }
+
+  if (mode === "subfolders" || mode === "auto") {
+    for (const name of fs.readdirSync(nlDir)) {
+      const dirPath = path.join(nlDir, name);
+      if (!fs.statSync(dirPath).isDirectory()) continue;
+      for (const childName of fs.readdirSync(dirPath)) {
+        const filePath = path.join(dirPath, childName);
+        if (fs.statSync(filePath).isFile() && isSupportedVideoFile(childName)) {
+          entries.push(toPosixRelative(nlDir, filePath));
+        }
+      }
+    }
+  }
+
+  if (!["flat", "subfolders", "auto"].includes(mode)) {
+    throw new Error(`Unsupported VIDEO_LAYOUT: ${mode}`);
+  }
+
+  return entries
     .sort((a, b) => a.localeCompare(b));
 }
 

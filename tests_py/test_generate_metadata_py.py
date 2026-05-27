@@ -18,6 +18,7 @@ from scripts.generate_metadata import (
     load_api_blueprints,
     merge_rating,
     parse_video_filename,
+    scan_video_files,
     write_outputs,
 )
 
@@ -137,6 +138,28 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertIn("Oliver & Co", build_query_candidates("Oliver en Co"))
         self.assertIn("De Reddertjes in Kangoeroeland", build_query_candidates("De Reddertjes in Kangeroeland"))
         self.assertIn("The Tigger Movie", build_query_candidates("Tijgetjes Film"))
+
+    def test_scans_either_flat_video_files_or_release_subfolders(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "Frozen.2013.BluRay.NL.avi").write_text("")
+            release_dir = root / "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM"
+            release_dir.mkdir()
+            (release_dir / "aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv").write_text("")
+            (release_dir / "aladdin.1992.nfo").write_text("")
+
+            self.assertEqual(scan_video_files(root, "flat"), ["Frozen.2013.BluRay.NL.avi"])
+            self.assertEqual(
+                scan_video_files(root, "subfolders"),
+                ["Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"],
+            )
+            self.assertEqual(
+                scan_video_files(root, "auto"),
+                [
+                    "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv",
+                    "Frozen.2013.BluRay.NL.avi",
+                ],
+            )
 
     def test_duplicate_sources_are_reported_without_failing_generation(self):
         metas = [{"id": "tekenfilms:toy-story-1995", "videoFilename": "Toy Story (1995).m4v"}]
