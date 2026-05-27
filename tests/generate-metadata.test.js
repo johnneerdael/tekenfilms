@@ -17,6 +17,7 @@ const {
   formatRuntime,
   mergeRating,
   loadApiBlueprints,
+  resolveVideoDir,
   scanVideoFiles
 } = require("../scripts/generate-metadata");
 
@@ -122,6 +123,17 @@ test("scans either flat video files or release subfolders", () => {
       "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv",
       "Frozen.2013.BluRay.NL.avi"
     ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("resolves custom video directories from env-style values", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tekenfilms-root-"));
+  try {
+    assert.equal(resolveVideoDir(undefined, root), path.join(root, "NL"));
+    assert.equal(resolveVideoDir("Downloads", root), path.join(root, "Downloads"));
+    assert.equal(resolveVideoDir("/mnt/media/tekenfilms", root), "/mnt/media/tekenfilms");
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

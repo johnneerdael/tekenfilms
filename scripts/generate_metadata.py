@@ -418,6 +418,14 @@ def resolve_video_layout(layout=None):
     return (layout or os.environ.get("VIDEO_LAYOUT") or os.environ.get("NL_LAYOUT") or "flat").lower()
 
 
+def resolve_video_dir(root_dir, env):
+    value = env.get("VIDEO_DIR")
+    if not value:
+        return root_dir / "NL"
+    path = Path(value)
+    return path if path.is_absolute() else root_dir / path
+
+
 def scan_video_files(nl_dir, layout=None):
     if not nl_dir.exists():
         raise RuntimeError(f"Missing local video directory: {nl_dir}")
@@ -502,7 +510,7 @@ def generate(root_dir, write=False):
     ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
     poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
-    filenames = scan_video_files(root_dir / "NL")
+    filenames = scan_video_files(resolve_video_dir(root_dir, env), env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
     metas = []
     failures = []
     duplicates = []

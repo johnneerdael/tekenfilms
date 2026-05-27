@@ -7,9 +7,10 @@ const path = require("node:path");
 const {
   DATA_DIR,
   META_DIR,
-  NL_DIR,
   POSTER_DIR,
-  ROOT_DIR
+  ROOT_DIR,
+  VIDEO_DIR,
+  resolveVideoDir
 } = require("../lib/constants");
 const { parseVideoFilename, isSupportedVideoFile } = require("../lib/filename-parser");
 const { buildMovieId, idToSlug } = require("../lib/id");
@@ -358,7 +359,7 @@ function toPosixRelative(baseDir, filePath) {
   return path.relative(baseDir, filePath).split(path.sep).join("/");
 }
 
-function scanVideoFiles(nlDir = NL_DIR, layout) {
+function scanVideoFiles(nlDir = VIDEO_DIR, layout) {
   if (!fs.existsSync(nlDir)) {
     throw new Error(`Missing local video directory: ${nlDir}`);
   }
@@ -412,7 +413,7 @@ function addMetaOrDuplicate(meta, seenIds, metas, duplicates) {
 
 async function generate() {
   const manualMatches = readJson(path.join(DATA_DIR, "manual-matches.json"), {});
-  const filenames = scanVideoFiles();
+  const filenames = scanVideoFiles(resolveVideoDir(process.env.VIDEO_DIR), process.env.VIDEO_LAYOUT || process.env.NL_LAYOUT);
   const baseUrl = DEFAULT_BASE_URL;
   const failures = [];
   const duplicates = [];
@@ -522,6 +523,7 @@ module.exports = {
   formatRuntime,
   loadApiBlueprints,
   mergeRating,
+  resolveVideoDir,
   scanVideoFiles,
   generate
 };

@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const { getRouter } = require("stremio-addon-sdk");
 const { addonInterface, manifest } = require("./addon");
-const { DEFAULT_PORT, NL_DIR, POSTER_DIR } = require("./lib/constants");
+const { DEFAULT_PORT, POSTER_DIR, VIDEO_DIR } = require("./lib/constants");
 
 function createApp() {
   const app = express();
@@ -25,7 +25,7 @@ function createApp() {
     res.json(manifest);
   });
 
-  app.use("/nl-gesproken", express.static(NL_DIR, {
+  app.use("/nl-gesproken", express.static(VIDEO_DIR, {
     fallthrough: true,
     index: false,
     setHeaders(res) {

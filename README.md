@@ -25,11 +25,13 @@ IMDBRATINGS_API_KEY=your_imdb_ratings_key
 TOPPOSTER_API_URL=https://api.top-posters.com
 TOPPOSTER_API_KEY=your_top_posters_key
 BASE_URL=https://tekenfilms.nexioapp.org
+VIDEO_DIR=NL
 VIDEO_LAYOUT=flat
 PORT=7010
 ```
 
 `BASE_URL` should be the public URL Stremio will use for stream and poster links.
+`VIDEO_DIR` controls where the generator and server read video files from. Relative paths are resolved from the project directory; absolute paths are used directly.
 `VIDEO_LAYOUT` controls how files are discovered in `NL/`:
 
 - `flat`: videos are directly in `NL/`
@@ -86,7 +88,12 @@ NL/Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/
 └── aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv
 ```
 
-Set `VIDEO_LAYOUT=subfolders` for this layout, or `VIDEO_LAYOUT=auto` while migrating between layouts.
+Set `VIDEO_LAYOUT=subfolders` for this layout, or `VIDEO_LAYOUT=auto` while migrating between layouts. If the files live outside the project, set `VIDEO_DIR`, for example:
+
+```env
+VIDEO_DIR=/home/jneerdael/Downloads
+VIDEO_LAYOUT=subfolders
+```
 
 ## Preview Metadata Matches
 
@@ -96,7 +103,7 @@ Run the Python preview generator before starting the addon:
 npm run generate:preview
 ```
 
-This scans `NL/`, queries TMDB, enriches matches with IMDb ratings when available, and writes:
+This scans `VIDEO_DIR` (default `NL/`), queries TMDB, enriches matches with IMDb ratings when available, and writes:
 
 ```text
 data/generation-report.json
@@ -250,7 +257,7 @@ This runs:
 
 ### `Missing local video directory`
 
-Create `NL/` and add video files before running the generator.
+Create `NL/` and add video files before running the generator, or set `VIDEO_DIR` in `.env` to the folder that contains them.
 
 ### `TMDB_API_KEY is missing from .env`
 

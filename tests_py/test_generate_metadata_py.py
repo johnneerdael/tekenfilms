@@ -18,6 +18,7 @@ from scripts.generate_metadata import (
     load_api_blueprints,
     merge_rating,
     parse_video_filename,
+    resolve_video_dir,
     scan_video_files,
     write_outputs,
 )
@@ -160,6 +161,13 @@ class GenerateMetadataPythonTests(unittest.TestCase):
                     "Frozen.2013.BluRay.NL.avi",
                 ],
             )
+
+    def test_resolves_custom_video_directories_from_env_style_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self.assertEqual(resolve_video_dir(root, {}), root / "NL")
+            self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "Downloads"}), root / "Downloads")
+            self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "/mnt/media/tekenfilms"}), Path("/mnt/media/tekenfilms"))
 
     def test_duplicate_sources_are_reported_without_failing_generation(self):
         metas = [{"id": "tekenfilms:toy-story-1995", "videoFilename": "Toy Story (1995).m4v"}]
