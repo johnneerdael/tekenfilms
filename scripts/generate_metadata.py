@@ -410,7 +410,7 @@ def parse_mediainfo_json(value, filename=None):
     }
 
 
-def probe_video_files(video_dir, filenames, env):
+def probe_video_files(video_dir, filenames, env, file_paths=None):
     if not truthy_env(env.get("MEDIAINFO_ENABLED"), default=True):
         return {}, []
     mediainfo_bin = env.get("MEDIAINFO_PATH") or shutil.which("mediainfo")
@@ -419,7 +419,7 @@ def probe_video_files(video_dir, filenames, env):
     results = {}
     failures = []
     for filename in filenames:
-        file_path = video_dir / filename
+        file_path = (file_paths or {}).get(filename) or video_dir / filename
         try:
             completed = subprocess.run(
                 [mediainfo_bin, "--Output=JSON", str(file_path)],
@@ -810,6 +810,34 @@ def resolve_video_dir(root_dir, env):
     return path if path.is_absolute() else root_dir / path
 
 
+def slug_path_alias(value):
+    parts = [part for part in str(value or "").replace("\\", "/").split("/") if part]
+    raw = parts[-1] if parts else "media"
+    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", raw.lower())) or "media"
+
+
+def resolve_video_dirs(root_dir, env):
+    value = env.get("VIDEO_DIRS")
+    if not value:
+        return [{"alias": None, "path": resolve_video_dir(root_dir, env)}]
+    result = []
+    for index, entry in enumerate(part.strip() for part in value.split(",")):
+        if not entry:
+            continue
+        if "=" in entry:
+            alias, raw_path = entry.split("=", 1)
+            alias = slug_path_alias(alias.strip())
+            raw_path = raw_path.strip()
+            if not raw_path:
+                continue
+        else:
+            raw_path = entry
+            alias = None if index == 0 else slug_path_alias(raw_path)
+        path = Path(raw_path)
+        result.append({"alias": alias, "path": path if path.is_absolute() else root_dir / path})
+    return result or [{"alias": None, "path": resolve_video_dir(root_dir, env)}]
+
+
 def scan_video_files(nl_dir, layout=None):
     if not nl_dir.exists():
         raise RuntimeError(f"Missing local video directory: {nl_dir}")
@@ -830,6 +858,18 @@ def scan_video_files(nl_dir, layout=None):
                 if path.is_file() and path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS
             )
     return sorted(entries)
+
+
+def scan_video_sources(video_dirs, layout=None):
+    filenames = []
+    file_paths = {}
+    for source in video_dirs:
+        source_files = scan_video_files(source["path"], layout)
+        for filename in source_files:
+            virtual_filename = f"{source['alias']}/{filename}" if source.get("alias") else filename
+            filenames.append(virtual_filename)
+            file_paths[virtual_filename] = source["path"] / filename
+    return sorted(filenames), file_paths
 
 
 def group_series_sources(filenames, stream_infos=None):
@@ -920,9 +960,9 @@ def generate(root_dir, write=False):
     ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
     poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
-    video_dir = resolve_video_dir(root_dir, env)
-    filenames = scan_video_files(video_dir, env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
-    stream_infos, mediainfo_failures = probe_video_files(video_dir, filenames, env)
+    video_dirs = resolve_video_dirs(root_dir, env)
+    filenames, file_paths = scan_video_sources(video_dirs, env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
+    stream_infos, mediainfo_failures = probe_video_files(root_dir, filenames, env, file_paths)
     parsed_files = [parse_video_filename(filename) for filename in filenames]
     movie_filenames = [parsed["filename"] for parsed in parsed_files if parsed.get("mediaType") != "series"]
     series_sources = group_series_sources(filenames, stream_infos)
@@ -996,6 +1036,10 @@ def generate(root_dir, write=False):
         "duplicateCount": len(duplicates),
         "mediainfoCount": len(stream_infos),
         "mediainfoFailures": mediainfo_failures,
+        "videoDirs": [
+            {"alias": source.get("alias"), "path": str(source["path"])}
+            for source in video_dirs
+        ],
         "successes": [
             {
                 "filename": meta.get("videoFilename") or meta.get("name"),

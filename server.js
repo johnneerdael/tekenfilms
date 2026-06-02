@@ -3,10 +3,21 @@ require("dotenv").config();
 const express = require("express");
 const { getRouter } = require("stremio-addon-sdk");
 const { addonInterface, manifest } = require("./addon");
-const { DEFAULT_PORT, POSTER_DIR, VIDEO_DIR } = require("./lib/constants");
+const { DEFAULT_PORT, POSTER_DIR, VIDEO_DIRS } = require("./lib/constants");
 
-function createApp() {
+function staticOptions() {
+  return {
+    fallthrough: true,
+    index: false,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+    }
+  };
+}
+
+function createApp(options = {}) {
   const app = express();
+  const videoDirs = options.videoDirs || VIDEO_DIRS;
 
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -25,13 +36,13 @@ function createApp() {
     res.json(manifest);
   });
 
-  app.use("/nl-gesproken", express.static(VIDEO_DIR, {
-    fallthrough: true,
-    index: false,
-    setHeaders(res) {
-      res.setHeader("Cache-Control", "public, max-age=86400");
-    }
-  }));
+  for (const directory of videoDirs.filter(item => item.alias)) {
+    app.use(`/nl-gesproken/${directory.alias}`, express.static(directory.path, staticOptions()));
+  }
+
+  for (const directory of videoDirs.filter(item => !item.alias)) {
+    app.use("/nl-gesproken", express.static(directory.path, staticOptions()));
+  }
 
   app.use("/posters", express.static(POSTER_DIR, {
     fallthrough: true,

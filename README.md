@@ -28,6 +28,7 @@ TOPPOSTER_API_URL=https://api.top-posters.com
 TOPPOSTER_API_KEY=your_top_posters_key
 BASE_URL=https://tekenfilms.nexioapp.org
 VIDEO_DIR=NL
+VIDEO_DIRS=/app/NL,nas=/app/NAS
 VIDEO_LAYOUT=flat
 MEDIAINFO_ENABLED=true
 MEDIAINFO_PATH=mediainfo
@@ -36,6 +37,16 @@ PORT=7010
 
 `BASE_URL` should be the public URL Stremio will use for stream and poster links.
 `VIDEO_DIR` controls where the generator and server read video files from. Relative paths are resolved from the project directory; absolute paths are used directly.
+`VIDEO_DIRS` can be used instead of `VIDEO_DIR` to scan and serve multiple roots. Use comma-separated entries. An entry can be a plain path or `alias=/path`.
+
+Example:
+
+```env
+VIDEO_DIRS=/app/NL,nas=/app/NAS
+```
+
+The first plain path keeps the existing URL shape, for example `/nl-gesproken/Frozen.mkv`. Aliased roots are namespaced in stream URLs, for example `/nl-gesproken/nas/Asterix.mkv`. This avoids collisions when two roots contain similar release folders.
+
 `VIDEO_LAYOUT` controls how files are discovered in `NL/`:
 
 - `flat`: videos are directly in `NL/`
@@ -102,6 +113,18 @@ Set `VIDEO_LAYOUT=subfolders` for this layout, or `VIDEO_LAYOUT=auto` while migr
 ```env
 VIDEO_DIR=/home/jneerdael/Downloads
 VIDEO_LAYOUT=subfolders
+```
+
+For multiple host folders in Docker, mount each host path and set `VIDEO_DIRS` to the container paths:
+
+```yaml
+environment:
+  VIDEO_DIRS: "/app/NL,nas=/app/NAS"
+  VIDEO_LAYOUT: "auto"
+volumes:
+  - /homeassistant/dutchfam:/app/NL:ro
+  - /homeassistant/nas:/app/NAS:ro
+  - ./data:/app/data:ro
 ```
 
 ## TV Series

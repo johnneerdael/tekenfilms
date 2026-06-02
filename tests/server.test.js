@@ -56,3 +56,32 @@ test("serves self-hosted posters", async () => {
     fs.rmSync(path.join(postersDir, "test-poster.jpg"), { force: true });
   }
 });
+
+test("serves videos from multiple configured directories", async () => {
+  const tempRoot = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "tekenfilms-video-roots-"));
+  const nlDir = path.join(tempRoot, "NL");
+  const nasDir = path.join(tempRoot, "NAS");
+  fs.mkdirSync(nlDir);
+  fs.mkdirSync(nasDir);
+  fs.writeFileSync(path.join(nlDir, "Frozen.avi"), "nl");
+  fs.writeFileSync(path.join(nasDir, "Asterix.mkv"), "nas");
+
+  const { server, url } = await listen(createApp({
+    videoDirs: [
+      { alias: null, path: nlDir },
+      { alias: "nas", path: nasDir }
+    ]
+  }));
+  try {
+    const nlResponse = await fetch(`${url}/nl-gesproken/Frozen.avi`);
+    assert.equal(nlResponse.status, 200);
+    assert.equal(await nlResponse.text(), "nl");
+
+    const nasResponse = await fetch(`${url}/nl-gesproken/nas/Asterix.mkv`);
+    assert.equal(nasResponse.status, 200);
+    assert.equal(await nasResponse.text(), "nas");
+  } finally {
+    server.close();
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});

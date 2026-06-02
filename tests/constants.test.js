@@ -6,7 +6,8 @@ const {
   CATALOG_ID,
   ID_PREFIX,
   SUPPORTED_VIDEO_EXTENSIONS,
-  normalizeBaseUrl
+  normalizeBaseUrl,
+  resolveVideoDirs
 } = require("../lib/constants");
 
 test("exports stable addon constants", () => {
@@ -19,4 +20,15 @@ test("exports stable addon constants", () => {
 test("normalizes base urls without trailing slashes", () => {
   assert.equal(normalizeBaseUrl("https://tekenfilms.nexioapp.org/"), "https://tekenfilms.nexioapp.org");
   assert.equal(normalizeBaseUrl("http://127.0.0.1:7010///"), "http://127.0.0.1:7010");
+});
+
+test("resolves multiple video directories with optional aliases", () => {
+  assert.deepEqual(resolveVideoDirs("NL,nas=NAS", "/app"), [
+    { alias: null, path: "/app/NL" },
+    { alias: "nas", path: "/app/NAS" }
+  ]);
+  assert.deepEqual(resolveVideoDirs("/app/NL,/app/NAS", "/app"), [
+    { alias: null, path: "/app/NL" },
+    { alias: "nas", path: "/app/NAS" }
+  ]);
 });

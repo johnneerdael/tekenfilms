@@ -8,8 +8,11 @@ services:
     environment:
       PORT: "7010"
       BASE_URL: "https://tekenfilms.nexioapp.org"
+      VIDEO_DIRS: "/app/NL,nas=/app/NAS"
+      VIDEO_LAYOUT: "auto"
     volumes:
       - ./NL:/app/NL:ro
+      - ./NAS:/app/NAS:ro
       - ./data:/app/data:ro
     networks:
       - default

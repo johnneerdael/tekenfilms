@@ -25,7 +25,9 @@ from scripts.generate_metadata import (
     parse_mediainfo_json,
     parse_video_filename,
     resolve_video_dir,
+    resolve_video_dirs,
     scan_video_files,
+    scan_video_sources,
     write_outputs,
 )
 
@@ -196,6 +198,31 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             self.assertEqual(resolve_video_dir(root, {}), root / "NL")
             self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "Downloads"}), root / "Downloads")
             self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "/mnt/media/tekenfilms"}), Path("/mnt/media/tekenfilms"))
+
+    def test_resolves_and_scans_multiple_video_directories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            nl = root / "NL"
+            nas = root / "NAS"
+            nl.mkdir()
+            nas.mkdir()
+            (nl / "Frozen.2013.BluRay.NL.avi").write_text("")
+            release_dir = nas / "Asterix.and.Obelix.The.Big.Fight.S01.2025"
+            release_dir.mkdir()
+            (release_dir / "Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv").write_text("")
+
+            dirs = resolve_video_dirs(root, {"VIDEO_DIRS": "NL,nas=NAS"})
+            self.assertEqual(dirs, [{"alias": None, "path": nl}, {"alias": "nas", "path": nas}])
+            filenames, file_paths = scan_video_sources(dirs, "auto")
+
+            self.assertEqual(
+                filenames,
+                [
+                    "Frozen.2013.BluRay.NL.avi",
+                    "nas/Asterix.and.Obelix.The.Big.Fight.S01.2025/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv",
+                ],
+            )
+            self.assertEqual(file_paths[filenames[1]], release_dir / "Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv")
 
     def test_groups_episode_files_by_show_and_season(self):
         files = [
