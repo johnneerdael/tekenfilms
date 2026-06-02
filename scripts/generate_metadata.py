@@ -70,6 +70,18 @@ def parse_video_filename(filename):
     path = Path(filename)
     extension = path.suffix.lower()
     basename = path.stem
+    episode_match = re.match(r"^(.*?)S(\d{1,2})E(\d{1,2})(?:[.\s]+(\d{4}))?", basename, flags=re.IGNORECASE)
+    if episode_match:
+        return {
+            "filename": filename,
+            "title": clean_title(episode_match.group(1)),
+            "year": int(episode_match.group(4)) if episode_match.group(4) else None,
+            "season": int(episode_match.group(2)),
+            "episode": int(episode_match.group(3)),
+            "mediaType": "series",
+            "extension": extension,
+        }
+
     parenthesized_year = re.match(r"^(.*)\((\d{4})\)\s*$", basename)
 
     if parenthesized_year:

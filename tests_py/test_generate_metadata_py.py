@@ -45,6 +45,20 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             },
         )
 
+    def test_parses_tv_episode_release_filenames(self):
+        self.assertEqual(
+            parse_video_filename("Asterix.and.Obelix.The.Big.Fight.S01E03.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv"),
+            {
+                "filename": "Asterix.and.Obelix.The.Big.Fight.S01E03.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv",
+                "title": "Asterix and Obelix The Big Fight",
+                "year": 2025,
+                "season": 1,
+                "episode": 3,
+                "mediaType": "series",
+                "extension": ".mkv",
+            },
+        )
+
     def test_applies_manual_match(self):
         parsed = {
             "filename": "De Reddertjes in Kangeroeland.m4v",

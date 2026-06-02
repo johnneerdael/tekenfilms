@@ -35,3 +35,15 @@ test("keeps title when year is absent", () => {
     extension: ".m4v"
   });
 });
+
+test("parses tv episode release filenames", () => {
+  assert.deepEqual(parseVideoFilename("Asterix.and.Obelix.The.Big.Fight.S01E03.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv"), {
+    filename: "Asterix.and.Obelix.The.Big.Fight.S01E03.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv",
+    title: "Asterix and Obelix The Big Fight",
+    year: 2025,
+    season: 1,
+    episode: 3,
+    mediaType: "series",
+    extension: ".mkv"
+  });
+});
