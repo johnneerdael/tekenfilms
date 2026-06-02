@@ -130,6 +130,8 @@ def build_movie_id(title, year):
 def id_to_slug(identifier):
     if re.match(r"^tt\d+$", identifier or ""):
         return identifier
+    if re.match(r"^tmdb:series:\d+$", identifier or ""):
+        return identifier.replace(":", "-")
     if re.match(r"^tmdb:\d+$", identifier or ""):
         return identifier.replace(":", "-")
     return identifier[len(ID_PREFIX):] if identifier.startswith(ID_PREFIX) else None
@@ -188,6 +190,25 @@ def choose_tmdb_result(parsed, results):
         if top >= 1 and top >= second * 2:
             return ranked[0]
     return results[0] if len(results) == 1 else None
+
+
+def tv_titles_match(parsed_title, result):
+    wanted = comparable_title(parsed_title)
+    return wanted in {
+        comparable_title(result.get("name")),
+        comparable_title(result.get("original_name")),
+    }
+
+
+def choose_tmdb_tv_result(parsed, results):
+    if not results:
+        return None
+    exact_matches = [result for result in results if tv_titles_match(parsed["title"], result)]
+    if parsed.get("year"):
+        exact_year = next((result for result in exact_matches if get_year(result.get("first_air_date")) == parsed["year"]), None)
+        if exact_year:
+            return exact_year
+    return exact_matches[0] if len(exact_matches) == 1 else (results[0] if len(results) == 1 else None)
 
 
 def unique_values(values):
@@ -529,6 +550,31 @@ class TmdbClient:
             return None
         return self.request(f"/movie/{result['id']}", params)
 
+    def tv_details_for(self, parsed):
+        params = {
+            "language": "nl-NL",
+            "append_to_response": "credits,images,external_ids",
+            "include_image_language": "nl,en,null",
+        }
+        result = None
+        for query in build_query_candidates(parsed["title"]):
+            query_parsed = {**parsed, "title": query}
+            search = self.request(
+                "/search/tv",
+                {
+                    "language": "nl-NL",
+                    "query": query,
+                    "first_air_date_year": parsed.get("year"),
+                    "include_adult": "false",
+                },
+            )
+            result = choose_tmdb_tv_result(query_parsed, search.get("results", []))
+            if result:
+                break
+        if not result:
+            return None
+        return self.request(f"/tv/{result['id']}", params)
+
 
 def resolve_video_layout(layout=None):
     return (layout or os.environ.get("VIDEO_LAYOUT") or os.environ.get("NL_LAYOUT") or "flat").lower()
@@ -595,7 +641,7 @@ def download_posters(root_dir, metas, poster_client):
             continue
         destination = temp_dir / f"{id_to_slug(meta['id'])}.jpg"
         if not poster_client.download(meta["imdbId"], destination):
-            failures.append({"filename": meta["videoFilename"], "reason": "no top-posters poster available", "id": meta["id"]})
+            failures.append({"filename": meta.get("videoFilename") or meta.get("name"), "reason": "no top-posters poster available", "id": meta["id"]})
     if failures:
         shutil.rmtree(temp_dir)
         return failures
@@ -606,7 +652,8 @@ def download_posters(root_dir, metas, poster_client):
     return []
 
 
-def write_outputs(root_dir, metas, report, write):
+def write_outputs(root_dir, metas, report, write, series_metas=None):
+    series_metas = series_metas or []
     data_dir = root_dir / "data"
     meta_dir = data_dir / "meta"
     write_json(data_dir / "generation-report.json", report)
@@ -616,20 +663,21 @@ def write_outputs(root_dir, metas, report, write):
         shutil.rmtree(meta_dir)
     meta_dir.mkdir(parents=True, exist_ok=True)
     write_json(data_dir / "catalog.json", {"metas": [build_catalog_meta(meta) for meta in metas]})
-    for meta in metas:
+    write_json(data_dir / "series-catalog.json", {"metas": [build_catalog_meta(meta) for meta in series_metas]})
+    for meta in metas + series_metas:
         write_json(meta_dir / f"{id_to_slug(meta['id'])}.json", meta)
 
 
 def add_meta_or_duplicate(meta, seen_ids, metas, duplicates):
     if meta["id"] in seen_ids:
         duplicates.append({
-            "filename": meta["videoFilename"],
+            "filename": meta.get("videoFilename") or meta.get("name"),
             "reason": "duplicate generated id",
             "id": meta["id"],
             "conflictsWith": seen_ids[meta["id"]],
         })
         return False
-    seen_ids[meta["id"]] = meta["videoFilename"]
+    seen_ids[meta["id"]] = meta.get("videoFilename") or meta.get("name")
     metas.append(meta)
     return True
 
@@ -640,16 +688,21 @@ def generate(root_dir, write=False):
     api_url = env.get("TMDB_API_URL") or f"{blueprints['tmdbServerUrl']}/3/"
     base_url = env.get("BASE_URL") or "http://127.0.0.1:7010"
     client = TmdbClient(api_url, env.get("TMDB_API_KEY"))
+    imdb_client = ImdbApiClient(env.get("IMDBAPI-DEV_URL") or blueprints["imdbApiBaseUrl"])
     ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
     poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
     filenames = scan_video_files(resolve_video_dir(root_dir, env), env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
+    parsed_files = [parse_video_filename(filename) for filename in filenames]
+    movie_filenames = [parsed["filename"] for parsed in parsed_files if parsed.get("mediaType") != "series"]
+    series_sources = group_series_sources(filenames)
     metas = []
+    series_metas = []
     failures = []
     duplicates = []
     seen_ids = {}
 
-    for filename in filenames:
+    for filename in movie_filenames:
         parsed = apply_manual_match(parse_video_filename(filename), manual_matches)
         try:
             details = client.details_for(parsed)
@@ -661,40 +714,60 @@ def generate(root_dir, write=False):
         except Exception as error:
             failures.append({"filename": filename, "reason": str(error), "parsed": parsed})
 
-    if metas:
+    for source in series_sources:
         try:
-            ratings = ratings_client.bulk([meta.get("imdbId") for meta in metas])
-            for meta in metas:
+            details = client.tv_details_for(source)
+            if not details:
+                failures.append({"filename": source["title"], "reason": "no confident TMDB TV match", "parsed": source})
+                continue
+            imdb_id = (details.get("external_ids") or {}).get("imdb_id")
+            imdb_episodes = []
+            if imdb_id:
+                for season in source["seasons"]:
+                    imdb_episodes.extend(imdb_client.episodes(imdb_id, season))
+            meta = build_series_meta(source, details, imdb_episodes, base_url)
+            add_meta_or_duplicate(meta, seen_ids, series_metas, duplicates)
+        except Exception as error:
+            failures.append({"filename": source["title"], "reason": str(error), "parsed": source})
+
+    all_metas = metas + series_metas
+    if all_metas:
+        try:
+            ratings = ratings_client.bulk([meta.get("imdbId") for meta in all_metas])
+            for meta in all_metas:
                 merge_rating(meta, ratings.get(meta.get("imdbId")))
                 meta["links"] = build_links(meta)
         except Exception as error:
             failures.append({"filename": "IMDb ratings", "reason": str(error)})
 
     if write and not failures:
-        failures.extend(download_posters(root_dir, metas, poster_client))
+        failures.extend(download_posters(root_dir, all_metas, poster_client))
 
     report = {
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "mode": "write" if write else "preview",
         "sourceCount": len(filenames),
-        "successCount": len(metas),
+        "successCount": len(all_metas),
+        "movieSuccessCount": len(metas),
+        "seriesSuccessCount": len(series_metas),
         "failureCount": len(failures),
         "duplicateCount": len(duplicates),
         "successes": [
             {
-                "filename": meta["videoFilename"],
+                "filename": meta.get("videoFilename") or meta.get("name"),
                 "id": meta["id"],
                 "name": meta["name"],
+                "type": meta["type"],
                 "releaseInfo": meta.get("releaseInfo"),
                 "tmdbId": meta.get("tmdbId"),
                 "imdbId": meta.get("imdbId"),
             }
-            for meta in metas
+            for meta in all_metas
         ],
         "duplicates": duplicates,
         "failures": failures,
     }
-    write_outputs(root_dir, metas, report, write=write and not failures)
+    write_outputs(root_dir, metas, report, write=write and not failures, series_metas=series_metas)
     return report
 
 

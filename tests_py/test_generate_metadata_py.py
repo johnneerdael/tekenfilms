@@ -17,6 +17,7 @@ from scripts.generate_metadata import (
     build_stremio_meta,
     choose_imdb_series_result,
     choose_tmdb_result,
+    choose_tmdb_tv_result,
     format_runtime,
     group_series_sources,
     load_api_blueprints,
@@ -151,6 +152,13 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             )["id"],
             56344,
         )
+
+    def test_chooses_tmdb_tv_result_by_title_and_year(self):
+        result = choose_tmdb_tv_result(
+            {"title": "Asterix and Obelix The Big Fight", "year": 2025},
+            [{"id": 260392, "name": "Asterix & Obelix: The Big Fight", "original_name": "Astérix & Obélix : Le Combat des chefs", "first_air_date": "2025-04-30"}],
+        )
+        self.assertEqual(result["id"], 260392)
 
     def test_builds_query_candidates_for_known_title_variants(self):
         self.assertIn("Meet the Robinsons", build_query_candidates("Meet the Robonsons"))
@@ -352,6 +360,23 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             catalog = json.loads((root / "data" / "catalog.json").read_text())
             self.assertEqual(catalog["metas"][0]["id"], "tekenfilms:frozen-2013")
             self.assertTrue((root / "data" / "meta" / "frozen-2013.json").exists())
+
+    def test_write_outputs_writes_series_catalog_and_meta(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            series = {
+                "id": "tt32145678",
+                "type": "series",
+                "name": "Asterix",
+                "videos": [{"id": "tt32145678:1:1", "videoFilename": "Asterix/Asterix.S01E01.mkv"}],
+            }
+            report = {"successCount": 1, "failureCount": 0}
+
+            write_outputs(root, [], report, write=True, series_metas=[series])
+
+            catalog = json.loads((root / "data" / "series-catalog.json").read_text())
+            self.assertEqual(catalog["metas"][0]["id"], "tt32145678")
+            self.assertTrue((root / "data" / "meta" / "tt32145678.json").exists())
 
     def test_loads_api_blueprints(self):
         root = Path(__file__).resolve().parents[1]
