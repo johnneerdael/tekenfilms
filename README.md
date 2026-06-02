@@ -13,6 +13,7 @@ Runtime metadata is local JSON. Use the generator first to match files in `NL/` 
 
 - Node.js 20+
 - Python 3.9+
+- `mediainfo`, optional but recommended for accurate stream metadata
 - Docker, if running the container
 - TMDB, IMDb ratings, and TOP Posters API keys in `.env`
 
@@ -28,6 +29,8 @@ TOPPOSTER_API_KEY=your_top_posters_key
 BASE_URL=https://tekenfilms.nexioapp.org
 VIDEO_DIR=NL
 VIDEO_LAYOUT=flat
+MEDIAINFO_ENABLED=true
+MEDIAINFO_PATH=mediainfo
 PORT=7010
 ```
 
@@ -38,6 +41,10 @@ PORT=7010
 - `flat`: videos are directly in `NL/`
 - `subfolders`: videos are one level down in release folders
 - `auto`: include both direct videos and videos one level down
+
+`MEDIAINFO_ENABLED` controls whether the Python generator probes video files with `mediainfo --Output=JSON`. When enabled and `mediainfo` is available, generated metadata stores accurate stream facts such as resolution, video codec, HDR/Dolby Vision tags, audio languages, audio codec, channel layout, file size, runtime, and bitrate. If `mediainfo` is missing or a probe fails, the addon falls back to filename-derived stream metadata and records probe diagnostics in `data/generation-report.json`.
+
+Set `MEDIAINFO_PATH` only when the binary is not on `PATH`.
 
 ## Directory Layout
 
@@ -148,6 +155,8 @@ The report includes:
 - `sourceCount`
 - `successCount`
 - `failureCount`
+- `mediainfoCount`
+- `mediainfoFailures`
 - `successes`
 - `failures`
 
@@ -192,12 +201,14 @@ data/meta/<movie-slug>.json
 data/posters/<imdb-id>.jpg
 ```
 
+Generated movie metadata includes `streamInfo` when `mediainfo` succeeds. Generated series metadata stores `streamInfo` on each episode video. Stream responses use that data first, then fall back to filename parsing for older snapshots or unprobed files.
+
 Poster URLs in metadata always point at the addon host, for example `https://tekenfilms.nexioapp.org/posters/tt2294629.jpg`. The generator fetches TOP Posters with `lang=nl-NL` first and retries without `lang` when no Dutch poster is returned.
 
-The Node generator is also available:
+`npm run generate` is an alias for the Python write generator. The legacy Node generator is still available for compatibility checks:
 
 ```bash
-npm run generate
+npm run generate:node
 ```
 
 ## Run Locally

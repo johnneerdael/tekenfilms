@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import unicodedata
 from datetime import datetime, timezone
@@ -221,6 +222,218 @@ def unique_values(values):
     return unique
 
 
+def truthy_env(value, default=True):
+    if value is None:
+        return default
+    return str(value).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def parse_int(value):
+    if value in (None, ""):
+        return None
+    match = re.search(r"\d+", str(value).replace(" ", ""))
+    return int(match.group(0)) if match else None
+
+
+def normalize_language(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in {"nl", "nld", "dut", "dutch", "nederlands"}:
+        return "Dutch"
+    if text in {"en", "eng", "english"}:
+        return "English"
+    return text[:1].upper() + text[1:]
+
+
+def normalize_audio_codec(track):
+    source = " ".join(str(track.get(key) or "") for key in ["CommercialName", "Format_Commercial_IfAny", "Format", "CodecID"])
+    lower = source.lower()
+    if "truehd" in lower:
+        return "TrueHD"
+    if "e-ac-3" in lower or "eac3" in lower or "ac-3+" in lower or "dolby digital plus" in lower:
+        return "DD+"
+    if "ac-3" in lower or "ac3" in lower or "dolby digital" in lower:
+        return "DD"
+    if "dts-hd ma" in lower:
+        return "DTS-HD MA"
+    if "dts-hd" in lower:
+        return "DTS-HD"
+    if "dts" in lower:
+        return "DTS"
+    if "aac" in lower:
+        return "AAC"
+    if "flac" in lower:
+        return "FLAC"
+    return track.get("Format") or track.get("CodecID")
+
+
+def normalize_audio_features(track):
+    source = " ".join(str(track.get(key) or "") for key in ["CommercialName", "Format_Commercial_IfAny", "Format", "CodecID", "Title"])
+    tags = []
+    if "atmos" in source.lower():
+        tags.append("Atmos")
+    return tags
+
+
+def normalize_video_codec(track):
+    source = " ".join(str(track.get(key) or "") for key in ["Format", "CodecID", "Format_Commercial_IfAny"])
+    lower = source.lower()
+    if "hevc" in lower or "h.265" in lower or "h265" in lower:
+        return "HEVC"
+    if "avc" in lower or "h.264" in lower or "h264" in lower:
+        return "AVC"
+    if "av1" in lower:
+        return "AV1"
+    if "mpeg-4 visual" in lower:
+        return "MPEG-4 Visual"
+    return track.get("Format") or track.get("CodecID")
+
+
+def normalize_resolution(width, height):
+    height_value = parse_int(height)
+    width_value = parse_int(width)
+    if height_value:
+        if height_value >= 2000 or (width_value and width_value >= 3800):
+            return "2160p"
+        if height_value >= 1000:
+            return "1080p"
+        if height_value >= 700:
+            return "720p"
+        if height_value >= 560:
+            return "576p"
+        if height_value >= 450:
+            return "480p"
+    return None
+
+
+def normalize_channels(track):
+    value = track.get("Channels")
+    if value not in (None, ""):
+        try:
+            channels = float(str(value).replace(" ", ""))
+            if channels >= 8:
+                return "7.1"
+            if channels >= 6:
+                return "5.1"
+            if channels >= 2:
+                return "2.0"
+            if channels > 0:
+                return "1.0"
+        except ValueError:
+            pass
+    layout = str(track.get("ChannelLayout") or track.get("ChannelPositions") or "")
+    if "LFE" in layout and len(re.findall(r"\b[LRCS]\b|Back|Side", layout)) >= 5:
+        return "5.1"
+    return None
+
+
+def normalize_hdr_tags(track):
+    source = " ".join(
+        str(track.get(key) or "")
+        for key in ["HDR_Format", "HDR_Format_String", "HDR_Format_Commercial", "colour_primaries", "transfer_characteristics"]
+    ).lower()
+    tags = []
+    if "dolby vision" in source:
+        tags.append("DV")
+    if "hdr10+" in source or "smpte st 2094" in source:
+        tags.append("HDR10+")
+    if "hdr10" in source or "pq" in source or "smpte st 2084" in source:
+        tags.append("HDR10")
+    if "hlg" in source:
+        tags.append("HLG")
+    return unique_values(tags)
+
+
+def parse_mediainfo_json(value, filename=None):
+    media = (value or {}).get("media") or {}
+    tracks = media.get("track") or []
+    general = next((track for track in tracks if track.get("@type") == "General"), {})
+    video_track = next((track for track in tracks if track.get("@type") == "Video"), {})
+    audio_tracks = [track for track in tracks if track.get("@type") == "Audio"]
+
+    width = parse_int(video_track.get("Width"))
+    height = parse_int(video_track.get("Height"))
+    parsed_audio_tracks = []
+    for index, track in enumerate(audio_tracks):
+        language = normalize_language(track.get("Language") or track.get("Language_String"))
+        codec = normalize_audio_codec(track)
+        channels = normalize_channels(track)
+        parsed_audio_tracks.append({
+            key: item
+            for key, item in {
+                "index": index,
+                "language": language,
+                "codec": codec,
+                "features": normalize_audio_features(track),
+                "channels": channels,
+                "title": track.get("Title"),
+                "default": str(track.get("Default") or "").lower() == "yes",
+                "forced": str(track.get("Forced") or "").lower() == "yes",
+            }.items()
+            if item not in (None, "", False, [])
+        })
+
+    video = {
+        key: item
+        for key, item in {
+            "codec": normalize_video_codec(video_track),
+            "width": width,
+            "height": height,
+            "resolution": normalize_resolution(width, height),
+            "bitDepth": parse_int(video_track.get("BitDepth")),
+            "frameRate": video_track.get("FrameRate"),
+            "hdr": normalize_hdr_tags(video_track),
+        }.items()
+        if item not in (None, "", [])
+    }
+
+    return {
+        key: item
+        for key, item in {
+            "source": "mediainfo",
+            "filename": filename,
+            "container": general.get("Format"),
+            "durationMs": parse_int(general.get("Duration")),
+            "sizeBytes": parse_int(general.get("FileSize")),
+            "overallBitRate": parse_int(general.get("OverallBitRate")),
+            "video": video,
+            "audioTracks": parsed_audio_tracks,
+            "audio": {
+                "languages": unique_values([track.get("language") for track in parsed_audio_tracks]),
+                "codecs": unique_values([track.get("codec") for track in parsed_audio_tracks]),
+                "features": unique_values([feature for track in parsed_audio_tracks for feature in track.get("features", [])]),
+                "channels": unique_values([track.get("channels") for track in parsed_audio_tracks]),
+            },
+        }.items()
+        if item not in (None, "", {}, [])
+    }
+
+
+def probe_video_files(video_dir, filenames, env):
+    if not truthy_env(env.get("MEDIAINFO_ENABLED"), default=True):
+        return {}, []
+    mediainfo_bin = env.get("MEDIAINFO_PATH") or shutil.which("mediainfo")
+    if not mediainfo_bin:
+        return {}, [{"filename": "mediainfo", "reason": "mediainfo binary not found; using filename-derived stream metadata"}]
+    results = {}
+    failures = []
+    for filename in filenames:
+        file_path = video_dir / filename
+        try:
+            completed = subprocess.run(
+                [mediainfo_bin, "--Output=JSON", str(file_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            results[filename] = parse_mediainfo_json(json.loads(completed.stdout), filename)
+        except Exception as error:
+            failures.append({"filename": filename, "reason": f"mediainfo probe failed: {error}"})
+    return results, failures
+
+
 def build_query_candidates(title):
     aliases = {
         "De Reddertjes in Kangeroeland": ["De Reddertjes in Kangoeroeland", "The Rescuers Down Under"],
@@ -343,6 +556,7 @@ def build_stremio_meta(parsed, details, base_url="http://127.0.0.1:7010"):
         "director": [person["name"] for person in crew if person.get("job") == "Director" and person.get("name")],
         "tmdbId": details.get("id"),
         "imdbId": details.get("imdb_id") or None,
+        "streamInfo": parsed.get("streamInfo"),
         "behaviorHints": {"defaultVideoId": identifier, "hasScheduledVideos": False},
     }
     return {key: value for key, value in meta.items() if value is not None}
@@ -379,6 +593,7 @@ def build_series_meta(source, details, imdb_episodes, base_url):
             "overview": imdb_episode.get("plot"),
             "runtime": episode_runtime(imdb_episode.get("runtimeSeconds")),
             "videoFilename": episode["filename"],
+            "streamInfo": episode.get("streamInfo"),
             "available": True,
         }
         videos.append({key: value for key, value in video.items() if value is not None})
@@ -610,12 +825,15 @@ def scan_video_files(nl_dir, layout=None):
     return sorted(entries)
 
 
-def group_series_sources(filenames):
+def group_series_sources(filenames, stream_infos=None):
+    stream_infos = stream_infos or {}
     groups = {}
     for filename in filenames:
         parsed = parse_video_filename(filename)
         if parsed.get("mediaType") != "series":
             continue
+        if stream_infos.get(filename):
+            parsed["streamInfo"] = stream_infos[filename]
         key = (comparable_title(parsed["title"]), parsed.get("year"))
         group = groups.setdefault(key, {"title": parsed["title"], "year": parsed.get("year"), "episodes": []})
         group["episodes"].append(parsed)
@@ -692,10 +910,12 @@ def generate(root_dir, write=False):
     ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
     poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
-    filenames = scan_video_files(resolve_video_dir(root_dir, env), env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
+    video_dir = resolve_video_dir(root_dir, env)
+    filenames = scan_video_files(video_dir, env.get("VIDEO_LAYOUT") or env.get("NL_LAYOUT"))
+    stream_infos, mediainfo_failures = probe_video_files(video_dir, filenames, env)
     parsed_files = [parse_video_filename(filename) for filename in filenames]
     movie_filenames = [parsed["filename"] for parsed in parsed_files if parsed.get("mediaType") != "series"]
-    series_sources = group_series_sources(filenames)
+    series_sources = group_series_sources(filenames, stream_infos)
     metas = []
     series_metas = []
     failures = []
@@ -704,6 +924,8 @@ def generate(root_dir, write=False):
 
     for filename in movie_filenames:
         parsed = apply_manual_match(parse_video_filename(filename), manual_matches)
+        if stream_infos.get(filename):
+            parsed["streamInfo"] = stream_infos[filename]
         try:
             details = client.details_for(parsed)
             if not details:
@@ -752,6 +974,8 @@ def generate(root_dir, write=False):
         "seriesSuccessCount": len(series_metas),
         "failureCount": len(failures),
         "duplicateCount": len(duplicates),
+        "mediainfoCount": len(stream_infos),
+        "mediainfoFailures": mediainfo_failures,
         "successes": [
             {
                 "filename": meta.get("videoFilename") or meta.get("name"),
@@ -761,6 +985,7 @@ def generate(root_dir, write=False):
                 "releaseInfo": meta.get("releaseInfo"),
                 "tmdbId": meta.get("tmdbId"),
                 "imdbId": meta.get("imdbId"),
+                "streamInfo": meta.get("streamInfo"),
             }
             for meta in all_metas
         ],
@@ -785,6 +1010,7 @@ def main():
 
     print(f"Mode: {report['mode']}")
     print(f"Sources: {report['sourceCount']} | matched: {report['successCount']} | failed: {report['failureCount']}")
+    print(f"MediaInfo: probed {report.get('mediainfoCount', 0)} | fallback {len(report.get('mediainfoFailures') or [])}")
     if report["successes"]:
         print("Matched:")
         for success in report["successes"]:

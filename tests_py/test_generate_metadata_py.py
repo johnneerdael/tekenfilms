@@ -22,6 +22,7 @@ from scripts.generate_metadata import (
     group_series_sources,
     load_api_blueprints,
     merge_rating,
+    parse_mediainfo_json,
     parse_video_filename,
     resolve_video_dir,
     scan_video_files,
@@ -255,6 +256,60 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertEqual(meta["genres"], ["Animatie", "Familie"])
         self.assertEqual(build_catalog_meta(meta)["id"], "tt2294629")
         self.assertEqual(build_catalog_meta(meta)["logo"], "https://image.tmdb.org/t/p/w500/logo.png")
+
+    def test_parses_mediainfo_json_into_stream_info(self):
+        stream_info = parse_mediainfo_json(
+            {
+                "media": {
+                    "track": [
+                        {
+                            "@type": "General",
+                            "Format": "Matroska",
+                            "Duration": "6123000",
+                            "FileSize": "8870718508",
+                            "OverallBitRate": "11590000",
+                        },
+                        {
+                            "@type": "Video",
+                            "Format": "HEVC",
+                            "Width": "3840",
+                            "Height": "2160",
+                            "BitDepth": "10",
+                            "FrameRate": "23.976",
+                            "HDR_Format": "Dolby Vision / SMPTE ST 2086 HDR10",
+                        },
+                        {
+                            "@type": "Audio",
+                            "Format": "E-AC-3",
+                            "CommercialName": "Dolby Digital Plus with Dolby Atmos",
+                            "Channels": "6",
+                            "Language": "nl",
+                            "Title": "Dutch",
+                            "Default": "Yes",
+                        },
+                        {
+                            "@type": "Audio",
+                            "Format": "AAC",
+                            "Channels": "2",
+                            "Language": "en",
+                        },
+                    ]
+                }
+            },
+            "Aladdin/aladdin.mkv",
+        )
+
+        self.assertEqual(stream_info["source"], "mediainfo")
+        self.assertEqual(stream_info["container"], "Matroska")
+        self.assertEqual(stream_info["durationMs"], 6123000)
+        self.assertEqual(stream_info["sizeBytes"], 8870718508)
+        self.assertEqual(stream_info["video"]["resolution"], "2160p")
+        self.assertEqual(stream_info["video"]["codec"], "HEVC")
+        self.assertEqual(stream_info["video"]["hdr"], ["DV", "HDR10"])
+        self.assertEqual(stream_info["audio"]["languages"], ["Dutch", "English"])
+        self.assertEqual(stream_info["audio"]["codecs"], ["DD+", "AAC"])
+        self.assertEqual(stream_info["audio"]["features"], ["Atmos"])
+        self.assertEqual(stream_info["audio"]["channels"], ["5.1", "2.0"])
 
     def test_builds_series_meta_with_parent_imdb_episode_video_ids(self):
         source = {

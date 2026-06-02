@@ -71,16 +71,26 @@ test("stream handler returns one direct stream", async () => {
     getBaseUrl: () => "https://tekenfilms.nexioapp.org",
     loadMeta: slug => slug === "tt2294629" ? {
       id: "tt2294629",
-      videoFilename: "Frozen.2013.BluRay.NL.avi"
+      videoFilename: "Frozen.2013.1080p.BluRay.NL.H264-DUTCHFAM.mkv"
     } : null
   });
 
   assert.deepEqual(await handlers.stream({ type: "movie", id: "tt2294629" }), {
     streams: [
       {
-        title: "NL Gesproken",
+        title: "NL Gesproken | 1080p | BluRay | AVC",
         name: "Tekenfilms",
-        url: "https://tekenfilms.nexioapp.org/nl-gesproken/Frozen.2013.BluRay.NL.avi"
+        description: [
+          "Video: 1080p | BluRay | AVC | MKV",
+          "Audio: Dutch",
+          "Release: DUTCHFAM",
+          "File: Frozen.2013.1080p.BluRay.NL.H264-DUTCHFAM.mkv"
+        ].join("\n"),
+        behaviorHints: {
+          filename: "Frozen.2013.1080p.BluRay.NL.H264-DUTCHFAM.mkv",
+          bingeGroup: "tt2294629|1080p|BluRay|AVC|DUTCHFAM"
+        },
+        url: "https://tekenfilms.nexioapp.org/nl-gesproken/Frozen.2013.1080p.BluRay.NL.H264-DUTCHFAM.mkv"
       }
     ],
     cacheMaxAge: 86400
@@ -93,10 +103,12 @@ test("series stream handler returns episode stream", async () => {
     loadMeta: slug => slug === "tt32145678" ? {
       id: "tt32145678",
       type: "series",
-      videos: [{ id: "tt32145678:1:1", title: "Episode Een", videoFilename: "Asterix.S01/Asterix.S01E01.mkv" }]
+      videos: [{ id: "tt32145678:1:1", title: "Episode Een", videoFilename: "Asterix.S01/Asterix.S01E01.1080p.WEB-DL.H265.mkv" }]
     } : null
   });
 
   const result = await handlers.stream({ type: "series", id: "tt32145678:1:1" });
-  assert.equal(result.streams[0].url, "https://tekenfilms.nexioapp.org/nl-gesproken/Asterix.S01/Asterix.S01E01.mkv");
+  assert.equal(result.streams[0].title, "Episode Een - NL Gesproken | 1080p | WEB-DL | HEVC");
+  assert.equal(result.streams[0].behaviorHints.filename, "Asterix.S01/Asterix.S01E01.1080p.WEB-DL.H265.mkv");
+  assert.equal(result.streams[0].url, "https://tekenfilms.nexioapp.org/nl-gesproken/Asterix.S01/Asterix.S01E01.1080p.WEB-DL.H265.mkv");
 });

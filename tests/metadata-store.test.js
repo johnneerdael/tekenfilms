@@ -70,6 +70,14 @@ test("builds encoded direct stream urls", () => {
   assert.deepEqual(stream, {
     title: "NL Gesproken",
     name: "Tekenfilms",
+    description: [
+      "Audio: Dutch",
+      "File: Alice in Wonderland (1951).m4v"
+    ].join("\n"),
+    behaviorHints: {
+      filename: "Alice in Wonderland (1951).m4v",
+      bingeGroup: "Alice in Wonderland (1951).m4v"
+    },
     url: "https://tekenfilms.nexioapp.org/nl-gesproken/Alice%20in%20Wonderland%20(1951).m4v"
   });
 });
@@ -83,6 +91,8 @@ test("builds encoded stream urls for videos in release subfolders", () => {
     stream.url,
     "https://tekenfilms.nexioapp.org/nl-gesproken/Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv"
   );
+  assert.equal(stream.title, "NL Gesproken | 2160p | WEB-DL | DSNP");
+  assert.equal(stream.behaviorHints.filename, "Aladdin.1992.2160p.DSNP.WEB-DL.DUAL-DUTCHFAM/aladdin.1992.2160p.dsnp.web-dl.dual-dutchfam.mkv");
 });
 
 test("builds stream for a series episode video id", () => {
@@ -93,12 +103,18 @@ test("builds stream for a series episode video id", () => {
       {
         id: "tt32145678:1:1",
         title: "Episode Een",
-        videoFilename: "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv"
+        videoFilename: "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv"
       }
     ]
   };
 
   const stream = buildStreamForVideo(meta, "tt32145678:1:1", "https://tekenfilms.nexioapp.org");
-  assert.equal(stream.title, "Episode Een - NL Gesproken");
-  assert.equal(stream.url, "https://tekenfilms.nexioapp.org/nl-gesproken/Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv");
+  assert.equal(stream.title, "Episode Een - NL Gesproken | 1080p | WEB-DL | HEVC");
+  assert.equal(stream.description, [
+    "Video: 1080p | WEB-DL | HEVC | MKV",
+    "Audio: Dutch | DD+ | 5.1",
+    "Release: DUTCHFAM",
+    "File: Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv"
+  ].join("\n"));
+  assert.equal(stream.url, "https://tekenfilms.nexioapp.org/nl-gesproken/Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv");
 });
