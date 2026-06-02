@@ -16,4 +16,5 @@ test("builds stable movie ids", () => {
 test("uses IMDb ids directly as metadata slugs", () => {
   assert.equal(idToSlug("tt2294629"), "tt2294629");
   assert.equal(idToSlug("tmdb:109445"), "tmdb-109445");
+  assert.equal(idToSlug("tmdb:series:260392"), "tmdb-series-260392");
 });

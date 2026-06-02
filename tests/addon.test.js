@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 
 const { manifest, createHandlers } = require("../addon");
 
-test("manifest exposes one no-configuration movie catalog", () => {
+test("manifest exposes no-configuration movie and series catalogs", () => {
   assert.equal(manifest.id, "org.nexio.tekenfilms");
   assert.equal(manifest.name, "Tekenfilms");
-  assert.deepEqual(manifest.types, ["movie"]);
+  assert.deepEqual(manifest.types, ["movie", "series"]);
   assert.equal(manifest.config, undefined);
   assert.equal(manifest.behaviorHints.configurable, false);
   assert.equal(manifest.behaviorHints.configurationRequired, false);
@@ -15,6 +15,11 @@ test("manifest exposes one no-configuration movie catalog", () => {
       id: "tekenfilms_nl",
       type: "movie",
       name: "Tekenfilms (Nederlands)"
+    },
+    {
+      id: "tekenfilms_series_nl",
+      type: "series",
+      name: "Series (Nederlands)"
     }
   ]);
 });
@@ -36,6 +41,17 @@ test("catalog handler returns generated metas for the rail", async () => {
 test("catalog handler ignores unknown catalogs", async () => {
   const handlers = createHandlers();
   assert.deepEqual(await handlers.catalog({ type: "series", id: "other" }), { metas: [] });
+});
+
+test("series catalog handler returns generated series metas", async () => {
+  const handlers = createHandlers({
+    loadSeriesCatalog: () => ({ metas: [{ id: "tt32145678", type: "series", name: "Asterix" }] })
+  });
+
+  assert.deepEqual(await handlers.catalog({ type: "series", id: "tekenfilms_series_nl" }), {
+    metas: [{ id: "tt32145678", type: "series", name: "Asterix" }],
+    cacheMaxAge: 86400
+  });
 });
 
 test("meta handler reads generated meta", async () => {
@@ -69,4 +85,18 @@ test("stream handler returns one direct stream", async () => {
     ],
     cacheMaxAge: 86400
   });
+});
+
+test("series stream handler returns episode stream", async () => {
+  const handlers = createHandlers({
+    getBaseUrl: () => "https://tekenfilms.nexioapp.org",
+    loadMeta: slug => slug === "tt32145678" ? {
+      id: "tt32145678",
+      type: "series",
+      videos: [{ id: "tt32145678:1:1", title: "Episode Een", videoFilename: "Asterix.S01/Asterix.S01E01.mkv" }]
+    } : null
+  });
+
+  const result = await handlers.stream({ type: "series", id: "tt32145678:1:1" });
+  assert.equal(result.streams[0].url, "https://tekenfilms.nexioapp.org/nl-gesproken/Asterix.S01/Asterix.S01E01.mkv");
 });
