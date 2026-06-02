@@ -12,7 +12,9 @@ from scripts.generate_metadata import (
     build_catalog_meta,
     build_movie_id,
     build_ratings_url,
+    build_imdbapi_url,
     build_stremio_meta,
+    choose_imdb_series_result,
     choose_tmdb_result,
     format_runtime,
     group_series_sources,
@@ -275,6 +277,26 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             build_ratings_url("https://api.nexioapp.org/v1/"),
             "https://api.nexioapp.org/v1/ratings/bulk",
         )
+
+    def test_builds_imdbapi_urls(self):
+        self.assertEqual(
+            build_imdbapi_url("https://api.imdbapi.dev", "/search/titles", {"query": "Asterix", "limit": 5}),
+            "https://api.imdbapi.dev/search/titles?query=Asterix&limit=5",
+        )
+        self.assertEqual(
+            build_imdbapi_url("https://api.imdbapi.dev/", "/titles/tt123/episodes", {"season": 1, "pageSize": 50}),
+            "https://api.imdbapi.dev/titles/tt123/episodes?season=1&pageSize=50",
+        )
+
+    def test_selects_imdb_series_search_result(self):
+        result = choose_imdb_series_result(
+            {"title": "Asterix and Obelix The Big Fight", "year": 2025},
+            [
+                {"id": "tt111", "type": "movie", "primaryTitle": "Asterix and Obelix The Big Fight", "startYear": 2025},
+                {"id": "tt222", "type": "tvSeries", "primaryTitle": "Asterix & Obelix: The Big Fight", "startYear": 2025},
+            ],
+        )
+        self.assertEqual(result["id"], "tt222")
 
     def test_write_outputs_supports_preview_and_write(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -258,6 +258,12 @@ def build_ratings_url(api_url):
     return f"{base}/v1/ratings/bulk"
 
 
+def build_imdbapi_url(api_url, pathname, params=None):
+    base = normalize_api_url(api_url, "https://api.imdbapi.dev")
+    query = urlencode({key: value for key, value in (params or {}).items() if value not in (None, "")})
+    return f"{base}{pathname}{f'?{query}' if query else ''}"
+
+
 def local_poster_url(base_url, identifier):
     return f"{base_url.rstrip().rstrip('/')}/posters/{id_to_slug(identifier)}.jpg"
 
@@ -337,6 +343,22 @@ def build_catalog_meta(meta):
     return {key: meta[key] for key in allowed if key in meta}
 
 
+def choose_imdb_series_result(parsed, results):
+    series_types = {"tvSeries", "tvMiniSeries", "TV_SERIES", "TV_MINI_SERIES"}
+    candidates = [result for result in results if result.get("type") in series_types]
+    wanted = comparable_title(parsed["title"])
+    exact = [
+        result
+        for result in candidates
+        if wanted in {comparable_title(result.get("primaryTitle")), comparable_title(result.get("originalTitle"))}
+    ]
+    if parsed.get("year"):
+        year_match = next((result for result in exact if result.get("startYear") == parsed["year"]), None)
+        if year_match:
+            return year_match
+    return exact[0] if len(exact) == 1 else (candidates[0] if len(candidates) == 1 else None)
+
+
 class RatingsClient:
     def __init__(self, api_url, api_key):
         self.url = build_ratings_url(api_url)
@@ -378,6 +400,32 @@ class PosterClient:
             except Exception:
                 continue
         return False
+
+
+class ImdbApiClient:
+    def __init__(self, api_url):
+        self.api_url = normalize_api_url(api_url, "https://api.imdbapi.dev")
+
+    def request(self, pathname, params=None):
+        request = Request(build_imdbapi_url(self.api_url, pathname, params), headers={"Accept": "application/json"})
+        with urlopen(request, timeout=25) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def search_titles(self, query, limit=10):
+        return self.request("/search/titles", {"query": query, "limit": limit}).get("titles", [])
+
+    def episodes(self, title_id, season):
+        episodes = []
+        page_token = None
+        while True:
+            body = self.request(
+                f"/titles/{quote(title_id)}/episodes",
+                {"season": season, "pageSize": 50, "pageToken": page_token},
+            )
+            episodes.extend(body.get("episodes", []))
+            page_token = body.get("nextPageToken")
+            if not page_token:
+                return episodes
 
 
 class TmdbClient:
