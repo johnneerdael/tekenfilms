@@ -460,6 +460,23 @@ def scan_video_files(nl_dir, layout=None):
     return sorted(entries)
 
 
+def group_series_sources(filenames):
+    groups = {}
+    for filename in filenames:
+        parsed = parse_video_filename(filename)
+        if parsed.get("mediaType") != "series":
+            continue
+        key = (comparable_title(parsed["title"]), parsed.get("year"))
+        group = groups.setdefault(key, {"title": parsed["title"], "year": parsed.get("year"), "episodes": []})
+        group["episodes"].append(parsed)
+    result = []
+    for group in groups.values():
+        group["episodes"].sort(key=lambda episode: (episode["season"], episode["episode"]))
+        group["seasons"] = sorted({episode["season"] for episode in group["episodes"]})
+        result.append(group)
+    return sorted(result, key=lambda group: comparable_title(group["title"]))
+
+
 def download_posters(root_dir, metas, poster_client):
     if not poster_client:
         return []

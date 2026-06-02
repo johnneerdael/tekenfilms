@@ -15,6 +15,7 @@ from scripts.generate_metadata import (
     build_stremio_meta,
     choose_tmdb_result,
     format_runtime,
+    group_series_sources,
     load_api_blueprints,
     merge_rating,
     parse_video_filename,
@@ -182,6 +183,18 @@ class GenerateMetadataPythonTests(unittest.TestCase):
             self.assertEqual(resolve_video_dir(root, {}), root / "NL")
             self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "Downloads"}), root / "Downloads")
             self.assertEqual(resolve_video_dir(root, {"VIDEO_DIR": "/mnt/media/tekenfilms"}), Path("/mnt/media/tekenfilms"))
+
+    def test_groups_episode_files_by_show_and_season(self):
+        files = [
+            "Asterix.and.Obelix.The.Big.Fight.S01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv",
+            "Asterix.and.Obelix.The.Big.Fight.S01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM/Asterix.and.Obelix.The.Big.Fight.S01E02.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv",
+        ]
+        grouped = group_series_sources(files)
+        self.assertEqual(len(grouped), 1)
+        self.assertEqual(grouped[0]["title"], "Asterix and Obelix The Big Fight")
+        self.assertEqual(grouped[0]["year"], 2025)
+        self.assertEqual(grouped[0]["seasons"], [1])
+        self.assertEqual([episode["episode"] for episode in grouped[0]["episodes"]], [1, 2])
 
     def test_duplicate_sources_are_reported_without_failing_generation(self):
         metas = [{"id": "tekenfilms:toy-story-1995", "videoFilename": "Toy Story (1995).m4v"}]

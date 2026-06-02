@@ -15,6 +15,7 @@ const {
   buildStremioMeta,
   buildCatalogMeta,
   formatRuntime,
+  groupSeriesSources,
   mergeRating,
   loadApiBlueprints,
   resolveVideoDir,
@@ -137,6 +138,19 @@ test("resolves custom video directories from env-style values", () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("groups episode files by show and season", () => {
+  const grouped = groupSeriesSources([
+    "Asterix.and.Obelix.The.Big.Fight.S01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv",
+    "Asterix.and.Obelix.The.Big.Fight.S01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM/Asterix.and.Obelix.The.Big.Fight.S01E02.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv"
+  ]);
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].title, "Asterix and Obelix The Big Fight");
+  assert.equal(grouped[0].year, 2025);
+  assert.deepEqual(grouped[0].seasons, [1]);
+  assert.deepEqual(grouped[0].episodes.map(episode => episode.episode), [1, 2]);
 });
 
 test("duplicate sources are reported without failing generation", () => {

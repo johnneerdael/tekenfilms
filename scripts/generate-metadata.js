@@ -396,6 +396,22 @@ function scanVideoFiles(nlDir = VIDEO_DIR, layout) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function groupSeriesSources(filenames) {
+  const groups = new Map();
+  for (const filename of filenames) {
+    const parsed = parseVideoFilename(filename);
+    if (parsed.mediaType !== "series") continue;
+    const key = `${comparableTitle(parsed.title)}:${parsed.year || ""}`;
+    if (!groups.has(key)) groups.set(key, { title: parsed.title, year: parsed.year, episodes: [] });
+    groups.get(key).episodes.push(parsed);
+  }
+  return Array.from(groups.values()).map(group => ({
+    ...group,
+    episodes: group.episodes.sort((a, b) => a.season - b.season || a.episode - b.episode),
+    seasons: Array.from(new Set(group.episodes.map(episode => episode.season))).sort((a, b) => a - b)
+  })).sort((a, b) => comparableTitle(a.title).localeCompare(comparableTitle(b.title)));
+}
+
 function addMetaOrDuplicate(meta, seenIds, metas, duplicates) {
   if (seenIds.has(meta.id)) {
     duplicates.push({
@@ -521,6 +537,7 @@ module.exports = {
   buildPosterUrl,
   buildRatingsUrl,
   formatRuntime,
+  groupSeriesSources,
   loadApiBlueprints,
   mergeRating,
   resolveVideoDir,
