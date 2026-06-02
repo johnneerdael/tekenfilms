@@ -327,6 +327,62 @@ def build_stremio_meta(parsed, details, base_url="http://127.0.0.1:7010"):
     return {key: value for key, value in meta.items() if value is not None}
 
 
+def build_episode_video_id(series_id, season, episode):
+    return f"{series_id}:{season}:{episode}"
+
+
+def episode_runtime(seconds):
+    if not seconds:
+        return None
+    minutes = int(seconds) // 60
+    return format_runtime(minutes)
+
+
+def build_series_meta(source, details, imdb_episodes, base_url):
+    imdb_id = (details.get("external_ids") or {}).get("imdb_id")
+    identifier = imdb_id or f"tmdb:series:{details['id']}"
+    episode_lookup = {
+        (int(item.get("season") or 0), int(item.get("episodeNumber") or 0)): item
+        for item in imdb_episodes
+        if item.get("season") and item.get("episodeNumber")
+    }
+    videos = []
+    for episode in source["episodes"]:
+        imdb_episode = episode_lookup.get((episode["season"], episode["episode"]), {})
+        video = {
+            "id": build_episode_video_id(identifier, episode["season"], episode["episode"]),
+            "title": imdb_episode.get("title") or f"Aflevering {episode['episode']}",
+            "season": episode["season"],
+            "episode": episode["episode"],
+            "episodeImdbId": imdb_episode.get("id"),
+            "overview": imdb_episode.get("plot"),
+            "runtime": episode_runtime(imdb_episode.get("runtimeSeconds")),
+            "videoFilename": episode["filename"],
+            "available": True,
+        }
+        videos.append({key: value for key, value in video.items() if value is not None})
+    first_air_year = get_year(details.get("first_air_date")) or source.get("year")
+    meta = {
+        "id": identifier,
+        "type": "series",
+        "name": details.get("name") or source["title"],
+        "originalName": details.get("original_name") or details.get("name") or source["title"],
+        "releaseInfo": str(first_air_year) if first_air_year else None,
+        "released": f"{details['first_air_date']}T00:00:00.000Z" if details.get("first_air_date") else None,
+        "poster": local_poster_url(base_url, identifier),
+        "logo": pick_logo(details.get("images")),
+        "background": image_url("original", details.get("backdrop_path")),
+        "description": details.get("overview") or None,
+        "genres": [genre["name"] for genre in details.get("genres", []) if genre.get("name")],
+        "cast": [person["name"] for person in (details.get("credits", {}).get("cast") or [])[:8] if person.get("name")],
+        "tmdbId": details.get("id"),
+        "imdbId": imdb_id,
+        "videos": videos,
+        "behaviorHints": {"hasScheduledVideos": False},
+    }
+    return {key: value for key, value in meta.items() if value is not None}
+
+
 def merge_rating(meta, rating):
     if not rating:
         return meta

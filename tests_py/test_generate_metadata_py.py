@@ -12,6 +12,7 @@ from scripts.generate_metadata import (
     build_catalog_meta,
     build_movie_id,
     build_ratings_url,
+    build_series_meta,
     build_imdbapi_url,
     build_stremio_meta,
     choose_imdb_series_result,
@@ -246,6 +247,40 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertEqual(meta["genres"], ["Animatie", "Familie"])
         self.assertEqual(build_catalog_meta(meta)["id"], "tt2294629")
         self.assertEqual(build_catalog_meta(meta)["logo"], "https://image.tmdb.org/t/p/w500/logo.png")
+
+    def test_builds_series_meta_with_parent_imdb_episode_video_ids(self):
+        source = {
+            "title": "Asterix and Obelix The Big Fight",
+            "year": 2025,
+            "seasons": [1],
+            "episodes": [
+                {"filename": "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv", "title": "Asterix and Obelix The Big Fight", "year": 2025, "season": 1, "episode": 1},
+                {"filename": "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E02.2025.mkv", "title": "Asterix and Obelix The Big Fight", "year": 2025, "season": 1, "episode": 2},
+            ],
+        }
+        tmdb_details = {
+            "id": 260392,
+            "external_ids": {"imdb_id": "tt32145678"},
+            "name": "Asterix & Obelix: The Big Fight",
+            "original_name": "Astérix & Obélix : Le Combat des chefs",
+            "overview": "A Dutch description.",
+            "first_air_date": "2025-04-30",
+            "poster_path": "/poster.jpg",
+            "backdrop_path": "/backdrop.jpg",
+            "genres": [{"name": "Animatie"}],
+            "credits": {"cast": [{"name": "Alain Chabat"}], "crew": []},
+            "images": {"logos": [{"file_path": "/logo.png", "iso_639_1": "nl"}]},
+        }
+        imdb_episodes = [
+            {"id": "tt9000001", "title": "Episode Een", "season": "1", "episodeNumber": 1, "runtimeSeconds": 1320, "plot": "Plot 1"},
+            {"id": "tt9000002", "title": "Episode Twee", "season": "1", "episodeNumber": 2, "runtimeSeconds": 1440, "plot": "Plot 2"},
+        ]
+        meta = build_series_meta(source, tmdb_details, imdb_episodes, "https://tekenfilms.nexioapp.org")
+        self.assertEqual(meta["id"], "tt32145678")
+        self.assertEqual(meta["type"], "series")
+        self.assertEqual(meta["videos"][0]["id"], "tt32145678:1:1")
+        self.assertEqual(meta["videos"][0]["episodeImdbId"], "tt9000001")
+        self.assertEqual(meta["videos"][0]["videoFilename"], "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv")
 
     def test_merges_imdb_rating_and_formats_runtime(self):
         self.assertEqual(format_runtime(102), "1h42min")
