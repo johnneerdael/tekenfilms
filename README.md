@@ -1,12 +1,13 @@
 # Tekenfilms Stremio Addon
 
-No-configuration Stremio addon for Dutch-audio cartoon movies stored as local video files.
+No-configuration Stremio addon for Dutch-audio cartoon movies and series stored as local video files.
 
-The addon exposes one Stremio movie catalog:
+The addon exposes Stremio catalogs for:
 
 - `Tekenfilms (Nederlands)`
+- `Series (Nederlands)`
 
-Runtime metadata is local JSON. Use the generator first to match files in `NL/` against TMDB, enrich them with IMDb ratings, download self-hosted posters, review the report, then write `data/catalog.json`, `data/meta/*.json`, and `data/posters/*.jpg`.
+Runtime metadata is local JSON. Use the generator first to match files in `NL/` or `VIDEO_DIR` against TMDB, enrich them with IMDb ratings and imdbapi.dev episode IDs, download self-hosted posters, review the report, then write `data/catalog.json`, `data/series-catalog.json`, `data/meta/*.json`, and `data/posters/*.jpg`.
 
 ## Requirements
 
@@ -44,9 +45,10 @@ PORT=7010
 .
 ├── NL/                         # local video files, not committed
 ├── data/
-│   ├── catalog.json            # generated catalog index
+│   ├── catalog.json            # generated movie catalog index
+│   ├── series-catalog.json     # generated series catalog index
 │   ├── manual-matches.json     # manual TMDB match overrides
-│   ├── meta/                   # generated movie metadata
+│   ├── meta/                   # generated movie and series metadata
 │   └── posters/                # downloaded self-hosted TOP Posters images
 ├── scripts/
 │   ├── generate-metadata.js    # Node generator
@@ -65,7 +67,7 @@ npm install
 
 ## Add Video Files
 
-Put Dutch-audio movies in `NL/`.
+Put Dutch-audio movies and series in `NL/` or the configured `VIDEO_DIR`.
 
 Supported extensions:
 
@@ -94,6 +96,36 @@ Set `VIDEO_LAYOUT=subfolders` for this layout, or `VIDEO_LAYOUT=auto` while migr
 VIDEO_DIR=/home/jneerdael/Downloads
 VIDEO_LAYOUT=subfolders
 ```
+
+## TV Series
+
+TV episodes are supported in one-level release folders. Example:
+
+```env
+VIDEO_DIR=/home/jneerdael/Downloads
+VIDEO_LAYOUT=subfolders
+```
+
+```text
+Asterix.and.Obelix.The.Big.Fight.S01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM/
+├── Asterix.and.Obelix.The.Big.Fight.S01E01.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv
+├── Asterix.and.Obelix.The.Big.Fight.S01E02.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv
+└── Asterix.and.Obelix.The.Big.Fight.S01E03.2025.1080p.WEB-DL.DDP5.1.H265-DUTCHFAM.mkv
+```
+
+Series IDs use the parent IMDb ID. Episode video IDs use Stremio's IMDb series format:
+
+```text
+{seriesImdbId}:{season}:{episode}
+```
+
+For example:
+
+```text
+tt32145678:1:1
+```
+
+Episode IMDb IDs from imdbapi.dev are stored in generated episode metadata as `episodeImdbId` when available, but Stremio stream requests use the parent-series video ID format above.
 
 ## Preview Metadata Matches
 
@@ -155,6 +187,7 @@ This writes:
 
 ```text
 data/catalog.json
+data/series-catalog.json
 data/meta/<movie-slug>.json
 data/posters/<imdb-id>.jpg
 ```
@@ -177,6 +210,7 @@ Local endpoints:
 
 - `http://127.0.0.1:7010/manifest.json`
 - `http://127.0.0.1:7010/catalog/movie/tekenfilms_nl.json`
+- `http://127.0.0.1:7010/catalog/series/tekenfilms_series_nl.json`
 - `http://127.0.0.1:7010/health`
 
 Install this manifest in Stremio for local testing:
