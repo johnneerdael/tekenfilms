@@ -104,6 +104,7 @@ test("chooses unique exact title even when filename year is wrong", () => {
 test("builds query candidates for known title variants", () => {
   assert.ok(buildQueryCandidates("Meet the Robonsons").includes("Meet the Robinsons"));
   assert.ok(buildQueryCandidates("Oliver en Co").includes("Oliver & Co"));
+  assert.ok(buildQueryCandidates("Asterix and Obelix The Big Fight").includes("Asterix & Obelix The Big Fight"));
   assert.ok(buildQueryCandidates("De Reddertjes in Kangeroeland").includes("De Reddertjes in Kangoeroeland"));
   assert.ok(buildQueryCandidates("Tijgetjes Film").includes("The Tigger Movie"));
 });

@@ -444,6 +444,8 @@ def build_query_candidates(title):
     candidates = [title]
     if " en " in title:
         candidates.append(title.replace(" en ", " & "))
+    if " and " in title:
+        candidates.append(title.replace(" and ", " & "))
     candidates.extend(aliases.get(title, []))
     return unique_values(candidates)
 

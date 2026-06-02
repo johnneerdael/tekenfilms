@@ -164,6 +164,7 @@ class GenerateMetadataPythonTests(unittest.TestCase):
     def test_builds_query_candidates_for_known_title_variants(self):
         self.assertIn("Meet the Robinsons", build_query_candidates("Meet the Robonsons"))
         self.assertIn("Oliver & Co", build_query_candidates("Oliver en Co"))
+        self.assertIn("Asterix & Obelix The Big Fight", build_query_candidates("Asterix and Obelix The Big Fight"))
         self.assertIn("De Reddertjes in Kangoeroeland", build_query_candidates("De Reddertjes in Kangeroeland"))
         self.assertIn("The Tigger Movie", build_query_candidates("Tijgetjes Film"))
 

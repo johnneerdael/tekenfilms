@@ -211,6 +211,7 @@ function buildQueryCandidates(title) {
   };
   const candidates = [title];
   if (title.includes(" en ")) candidates.push(title.replace(" en ", " & "));
+  if (title.includes(" and ")) candidates.push(title.replace(" and ", " & "));
   candidates.push(...(aliases[title] || []));
   return uniqueValues(candidates);
 }
