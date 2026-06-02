@@ -346,6 +346,32 @@ class GenerateMetadataPythonTests(unittest.TestCase):
         self.assertEqual(meta["videos"][0]["episodeImdbId"], "tt9000001")
         self.assertEqual(meta["videos"][0]["videoFilename"], "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv")
 
+    def test_builds_series_meta_when_imdb_episode_enrichment_is_missing(self):
+        source = {
+            "title": "Asterix and Obelix The Big Fight",
+            "year": 2025,
+            "seasons": [1],
+            "episodes": [
+                {"filename": "Asterix.S01/Asterix.and.Obelix.The.Big.Fight.S01E01.2025.mkv", "title": "Asterix and Obelix The Big Fight", "year": 2025, "season": 1, "episode": 1},
+            ],
+        }
+        tmdb_details = {
+            "id": 122781,
+            "external_ids": {"imdb_id": "tt14164922"},
+            "name": "Asterix & Obelix: De strijd van de stamhoofden",
+            "original_name": "Astérix & Obélix : Le Combat des chefs",
+            "first_air_date": "2025-04-30",
+            "genres": [],
+            "credits": {"cast": [], "crew": []},
+        }
+
+        meta = build_series_meta(source, tmdb_details, [], "https://tekenfilms.nexioapp.org")
+
+        self.assertEqual(meta["id"], "tt14164922")
+        self.assertEqual(meta["videos"][0]["id"], "tt14164922:1:1")
+        self.assertEqual(meta["videos"][0]["title"], "Aflevering 1")
+        self.assertNotIn("episodeImdbId", meta["videos"][0])
+
     def test_merges_imdb_rating_and_formats_runtime(self):
         self.assertEqual(format_runtime(102), "1h42min")
         meta = merge_rating({"id": "tt2294629"}, {"averageRating": 7.4, "numVotes": 123456})

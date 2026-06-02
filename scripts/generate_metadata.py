@@ -697,11 +697,16 @@ class PosterClient:
 
 
 class ImdbApiClient:
-    def __init__(self, api_url):
+    def __init__(self, api_url, api_key=None):
         self.api_url = normalize_api_url(api_url, "https://api.imdbapi.dev")
+        self.api_key = api_key
 
     def request(self, pathname, params=None):
-        request = Request(build_imdbapi_url(self.api_url, pathname, params), headers={"Accept": "application/json"})
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["X-API-Key"] = self.api_key
+        request = Request(build_imdbapi_url(self.api_url, pathname, params), headers=headers)
         with urlopen(request, timeout=25) as response:
             return json.loads(response.read().decode("utf-8"))
 
@@ -908,7 +913,10 @@ def generate(root_dir, write=False):
     api_url = env.get("TMDB_API_URL") or f"{blueprints['tmdbServerUrl']}/3/"
     base_url = env.get("BASE_URL") or "http://127.0.0.1:7010"
     client = TmdbClient(api_url, env.get("TMDB_API_KEY"))
-    imdb_client = ImdbApiClient(env.get("IMDBAPI-DEV_URL") or blueprints["imdbApiBaseUrl"])
+    imdb_client = ImdbApiClient(
+        env.get("IMDB_API_URL") or env.get("IMDBAPI-DEV_URL") or blueprints["imdbApiBaseUrl"],
+        env.get("IMDB_API_KEY") or env.get("IMDBAPI-DEV_KEY"),
+    )
     ratings_client = RatingsClient(env.get("IMDBRATINGS_API_URL"), env.get("IMDBRATINGS_API_KEY"))
     poster_client = PosterClient(env.get("TOPPOSTER_API_URL"), env.get("TOPPOSTER_API_KEY"))
     manual_matches = read_json(root_dir / "data" / "manual-matches.json", {})
@@ -921,6 +929,7 @@ def generate(root_dir, write=False):
     metas = []
     series_metas = []
     failures = []
+    warnings = []
     duplicates = []
     seen_ids = {}
 
@@ -948,7 +957,15 @@ def generate(root_dir, write=False):
             imdb_episodes = []
             if imdb_id:
                 for season in source["seasons"]:
-                    imdb_episodes.extend(imdb_client.episodes(imdb_id, season))
+                    try:
+                        imdb_episodes.extend(imdb_client.episodes(imdb_id, season))
+                    except Exception as error:
+                        warnings.append({
+                            "filename": source["title"],
+                            "reason": f"IMDb episode lookup failed: {error}",
+                            "imdbId": imdb_id,
+                            "season": season,
+                        })
             meta = build_series_meta(source, details, imdb_episodes, base_url)
             add_meta_or_duplicate(meta, seen_ids, series_metas, duplicates)
         except Exception as error:
@@ -975,6 +992,7 @@ def generate(root_dir, write=False):
         "movieSuccessCount": len(metas),
         "seriesSuccessCount": len(series_metas),
         "failureCount": len(failures),
+        "warningCount": len(warnings),
         "duplicateCount": len(duplicates),
         "mediainfoCount": len(stream_infos),
         "mediainfoFailures": mediainfo_failures,
@@ -992,6 +1010,7 @@ def generate(root_dir, write=False):
             for meta in all_metas
         ],
         "duplicates": duplicates,
+        "warnings": warnings,
         "failures": failures,
     }
     write_outputs(root_dir, metas, report, write=write and not failures, series_metas=series_metas)
@@ -1023,6 +1042,10 @@ def main():
             print(f"- {failure['filename']}: {failure['reason']}")
         print("See data/generation-report.json for details.")
         return 1
+    if report["warnings"]:
+        print("Warnings:")
+        for warning in report["warnings"]:
+            print(f"- {warning['filename']}: {warning['reason']}")
     if report["duplicates"]:
         print("Duplicates:")
         for duplicate in report["duplicates"]:
